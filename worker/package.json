@@ -1,0 +1,22 @@
+{
+  "name": "momentos-worker",
+  "version": "1.0.0",
+  "description": "MomentOS Scheduler Worker",
+  "main": "dist/scheduler.js",
+  "scripts": {
+    "dev": "tsx watch scheduler.ts",
+    "start": "node dist/scheduler.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.8.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.8",
+    "@types/node-cron": "^3.0.11",
+    "prisma": "^5.8.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

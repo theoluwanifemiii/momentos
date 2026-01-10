@@ -1,0 +1,90 @@
+# Docker Compose for MomentOS
+# File: docker-compose.yml
+# Run with: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: momentos_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: momentos
+      POSTGRES_USER: momentos
+      POSTGRES_PASSWORD: momentos_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U momentos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: momentos_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://momentos:momentos_password_change_me@postgres:5432/momentos
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      PORT: 3001
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: sh -c "npx prisma migrate deploy && npm start"
+
+  # Worker (Scheduler)
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: momentos_worker
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://momentos:momentos_password_change_me@postgres:5432/momentos
+      NODE_ENV: production
+    volumes:
+      - ./worker:/app
+      - /app/node_modules
+
+  # Frontend (Development)
+  # In production, build and serve as static files via Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: momentos_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: momentos_network
