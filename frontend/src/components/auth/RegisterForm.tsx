@@ -16,6 +16,10 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    if (!organizationName || organizationName.trim() === '') {
+      setError('Organization name is required');
+      return;
+    }
     if (password.length < 8) {
       setError('Password must be at least 8 characters');
       return;
@@ -49,6 +53,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
             onChange={(e) => setOrganizationName(e.target.value)}
             className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Your Church or Company"
+            required
           />
         </div>
         <div>

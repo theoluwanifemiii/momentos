@@ -1,18 +1,22 @@
 // Main API Server
 // File: backend/src/index.ts
 
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import { PrismaClient, OtpPurpose } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { z } from 'zod';
-import { randomInt } from 'crypto';
-import { CSVValidator } from './services/csvValidator';
-import { EmailService } from './services/emailService';
-import { otpTemplate, welcomeTemplate } from './services/internalEmailTemplates';
+import "dotenv/config";
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import { PrismaClient, OtpPurpose } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { z, ZodError } from "zod";
+import { randomInt } from "crypto";
+import { CSVValidator } from "./services/csvValidator";
+import { EmailService } from "./services/emailService";
+import {
+  otpTemplate,
+  welcomeTemplate,
+} from "./services/internalEmailTemplates";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,29 +24,32 @@ const prisma = new PrismaClient();
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
+app.use(express.json({ limit: "10mb" }));
+app.use(morgan("dev"));
 
 // JWT Secret (required via env)
-const JWT_SECRET = process.env.JWT_SECRET ?? '';
+const JWT_SECRET = process.env.JWT_SECRET ?? "";
 const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL;
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 
 if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is required');
+  throw new Error("JWT_SECRET is required");
 }
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
 
 // OTP helpers: create, send, and verify one-time codes for auth flows.
 function generateOtpCode() {
-  return randomInt(0, 1000000).toString().padStart(6, '0');
+  return randomInt(0, 1000000).toString().padStart(6, "0");
 }
 
-function interpolateTemplate(template: string, variables: Record<string, string>) {
+function interpolateTemplate(
+  template: string,
+  variables: Record<string, string>
+) {
   let result = template;
   for (const [key, value] of Object.entries(variables)) {
-    result = result.replace(new RegExp(`{{${key}}}`, 'g'), value);
+    result = result.replace(new RegExp(`{{${key}}}`, "g"), value);
   }
   return result;
 }
@@ -70,16 +77,16 @@ async function createAndSendOtp(params: {
   });
 
   const fromEmail = params.organization?.emailFromAddress || DEFAULT_FROM_EMAIL;
-  const fromName = DEFAULT_FROM_NAME || 'MomentOS';
+  const fromName = DEFAULT_FROM_NAME || "MomentOS";
 
   if (!fromEmail) {
-    throw new Error('DEFAULT_FROM_EMAIL is not configured');
+    throw new Error("DEFAULT_FROM_EMAIL is not configured");
   }
 
   const { subject, text, html } = otpTemplate({
     code,
     ttlMinutes: OTP_TTL_MINUTES,
-    purpose: params.purpose === OtpPurpose.REGISTER_VERIFY ? 'VERIFY' : 'RESET',
+    purpose: params.purpose === OtpPurpose.REGISTER_VERIFY ? "VERIFY" : "RESET",
   });
 
   await EmailService.send({
@@ -97,7 +104,11 @@ async function createAndSendOtp(params: {
 }
 
 // Verifies an OTP code and marks it as consumed on success.
-async function verifyOtpCode(params: { email: string; purpose: OtpPurpose; code: string }) {
+async function verifyOtpCode(params: {
+  email: string;
+  purpose: OtpPurpose;
+  code: string;
+}) {
   const otp = await prisma.otp.findFirst({
     where: {
       email: params.email,
@@ -105,15 +116,15 @@ async function verifyOtpCode(params: { email: string; purpose: OtpPurpose; code:
       consumedAt: null,
       expiresAt: { gt: new Date() },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 
   if (!otp) {
-    return { valid: false, reason: 'OTP expired or not found' };
+    return { valid: false, reason: "OTP expired or not found" };
   }
 
   if (otp.attempts >= otp.maxAttempts) {
-    return { valid: false, reason: 'OTP attempts exceeded' };
+    return { valid: false, reason: "OTP attempts exceeded" };
   }
 
   const matches = await bcrypt.compare(params.code, otp.codeHash);
@@ -122,7 +133,7 @@ async function verifyOtpCode(params: { email: string; purpose: OtpPurpose; code:
       where: { id: otp.id },
       data: { attempts: { increment: 1 } },
     });
-    return { valid: false, reason: 'Invalid OTP code' };
+    return { valid: false, reason: "Invalid OTP code" };
   }
 
   await prisma.otp.update({
@@ -139,24 +150,28 @@ interface AuthRequest extends Request {
   organizationId?: string;
 }
 
-async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+async function authenticate(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
+    const token = req.headers.authorization?.replace("Bearer ", "");
+
     if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: "Authentication required" });
     }
-    
+
     const decoded = jwt.verify(token, JWT_SECRET as jwt.Secret) as unknown as {
       userId: string;
       organizationId: string;
     };
     req.userId = decoded.userId;
     req.organizationId = decoded.organizationId;
-    
+
     next();
   } catch (err) {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -165,29 +180,47 @@ async function authenticate(req: AuthRequest, res: Response, next: NextFunction)
 // ============================================================================
 
 // Register new organization + admin user
-app.post('/api/auth/register', async (req: Request, res: Response) => {
+app.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
+    // Debug: log what we're receiving
+    console.log("Register request body:", JSON.stringify(req.body, null, 2));
+
     const schema = z.object({
       email: z.string().email(),
       password: z.string().min(8),
       organizationName: z.string().min(1),
-      timezone: z.string().default('UTC'),
+      timezone: z.string().default("UTC"),
     });
-    
-    const data = schema.parse(req.body);
-    
+
+    let data;
+    try {
+      data = schema.parse(req.body);
+    } catch (err: any) {
+      if (err instanceof ZodError) {
+        console.error("Validation error:", err.errors);
+        return res.status(400).json({
+          error: "Validation failed",
+          details: err.errors.map((e) => ({
+            field: e.path.join("."),
+            message: e.message,
+          })),
+        });
+      }
+      throw err;
+    }
+
     // Check if user exists
     const existing = await prisma.user.findUnique({
       where: { email: data.email },
     });
-    
+
     if (existing) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: "Email already registered" });
     }
-    
+
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10);
-    
+
     // Create organization and user
     const org = await prisma.organization.create({
       data: {
@@ -197,7 +230,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
           create: {
             email: data.email,
             passwordHash,
-            role: 'ADMIN',
+            role: "ADMIN",
           },
         },
       },
@@ -205,9 +238,9 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         users: true,
       },
     });
-    
+
     const user = org.users[0];
-    
+
     await createAndSendOtp({
       email: user.email,
       userId: user.id,
@@ -230,52 +263,54 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         timezone: org.timezone,
       },
       requiresVerification: true,
-      message: 'Verification code sent to your email.',
+      message: "Verification code sent to your email.",
     });
   } catch (err: any) {
-    console.error('Register error:', err);
-    res.status(400).json({ error: err.message || 'Registration failed' });
+    console.error("Register error:", err);
+    res.status(400).json({ error: err.message || "Registration failed" });
   }
 });
 
 // Login
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+app.post("/api/auth/login", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
       email: z.string().email(),
       password: z.string(),
     });
-    
+
     const data = schema.parse(req.body);
-    
+
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: data.email },
       include: { organization: true },
     });
-    
+
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
-    
+
     // Check password
     const valid = await bcrypt.compare(data.password, user.passwordHash);
-    
+
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     if (!user.emailVerifiedAt) {
-      return res.status(403).json({ error: 'Email not verified', requiresVerification: true });
+      return res
+        .status(403)
+        .json({ error: "Email not verified", requiresVerification: true });
     }
-    
+
     // Generate token
     const token = jwt.sign(
       { userId: user.id, organizationId: user.organizationId },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" }
     );
-    
+
     res.json({
       token,
       user: {
@@ -290,12 +325,12 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Login failed' });
+    res.status(400).json({ error: err.message || "Login failed" });
   }
 });
 
 // Send verification OTP for account activation.
-app.post('/api/auth/verify/send', async (req: Request, res: Response) => {
+app.post("/api/auth/verify/send", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
       email: z.string().email(),
@@ -316,14 +351,17 @@ app.post('/api/auth/verify/send', async (req: Request, res: Response) => {
       });
     }
 
-    res.json({ success: true, message: 'If the account exists, a code was sent.' });
+    res.json({
+      success: true,
+      message: "If the account exists, a code was sent.",
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
 // Verify account OTP and mark user as verified.
-app.post('/api/auth/verify', async (req: Request, res: Response) => {
+app.post("/api/auth/verify", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
       email: z.string().email(),
@@ -334,11 +372,11 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     if (user.emailVerifiedAt) {
-      return res.json({ success: true, message: 'Account already verified' });
+      return res.json({ success: true, message: "Account already verified" });
     }
 
     const result = await verifyOtpCode({
@@ -362,10 +400,12 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
 
     const welcomeFromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
     if (!welcomeFromEmail) {
-      return res.status(400).json({ error: 'Sender email not configured' });
+      return res.status(400).json({ error: "Sender email not configured" });
     }
 
-    const { subject, html, text } = welcomeTemplate({ organizationName: org?.name || 'MomentOS' });
+    const { subject, html, text } = welcomeTemplate({
+      organizationName: org?.name || "MomentOS",
+    });
 
     await EmailService.send({
       to: user.email,
@@ -373,7 +413,7 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
       html,
       text,
       from: {
-        name: DEFAULT_FROM_NAME || 'MomentOS',
+        name: DEFAULT_FROM_NAME || "MomentOS",
         email: welcomeFromEmail,
       },
     });
@@ -385,7 +425,7 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
 });
 
 // Send OTP for password reset.
-app.post('/api/auth/password/forgot', async (req: Request, res: Response) => {
+app.post("/api/auth/password/forgot", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
       email: z.string().email(),
@@ -406,14 +446,17 @@ app.post('/api/auth/password/forgot', async (req: Request, res: Response) => {
       });
     }
 
-    res.json({ success: true, message: 'If the account exists, a code was sent.' });
+    res.json({
+      success: true,
+      message: "If the account exists, a code was sent.",
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
 // Reset password with OTP verification.
-app.post('/api/auth/password/reset', async (req: Request, res: Response) => {
+app.post("/api/auth/password/reset", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
       email: z.string().email(),
@@ -425,7 +468,7 @@ app.post('/api/auth/password/reset', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     const result = await verifyOtpCode({
@@ -455,747 +498,846 @@ app.post('/api/auth/password/reset', async (req: Request, res: Response) => {
 // ============================================================================
 
 // Upload CSV
-app.post('/api/people/upload', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { csvContent } = req.body;
-    
-    if (!csvContent) {
-      return res.status(400).json({ error: 'CSV content is required' });
-    }
-    
-    // Validate CSV
-    const validation = await CSVValidator.validate(csvContent);
-    
-    // If there are valid rows, upsert them
-    if (validation.valid.length > 0) {
-      const orgId = req.organizationId!;
-      
-      // Upsert each person (update if email exists, create if not)
-      for (const person of validation.valid) {
-        await prisma.person.upsert({
-          where: {
-            organizationId_email: {
-              organizationId: orgId,
-              email: person.email,
-            },
-          },
-          update: {
-            fullName: person.fullName,
-            firstName: person.firstName,
-            birthday: person.birthday,
-            department: person.department,
-            role: person.role,
-          },
-          create: {
-            organizationId: orgId,
-            fullName: person.fullName,
-            firstName: person.firstName,
-            email: person.email,
-            birthday: person.birthday,
-            department: person.department,
-            role: person.role,
-          },
-        });
+app.post(
+  "/api/people/upload",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { csvContent } = req.body;
+
+      if (!csvContent) {
+        return res.status(400).json({ error: "CSV content is required" });
       }
+
+      // Validate CSV
+      const validation = await CSVValidator.validate(csvContent);
+
+      // If there are valid rows, upsert them
+      if (validation.valid.length > 0) {
+        const orgId = req.organizationId!;
+
+        // Upsert each person (update if email exists, create if not)
+        for (const person of validation.valid) {
+          await prisma.person.upsert({
+            where: {
+              organizationId_email: {
+                organizationId: orgId,
+                email: person.email,
+              },
+            },
+            update: {
+              fullName: person.fullName,
+              firstName: person.firstName,
+              birthday: person.birthday,
+              department: person.department,
+              role: person.role,
+            },
+            create: {
+              organizationId: orgId,
+              fullName: person.fullName,
+              firstName: person.firstName,
+              email: person.email,
+              birthday: person.birthday,
+              department: person.department,
+              role: person.role,
+            },
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        summary: validation.summary,
+        errors: validation.errors,
+      });
+    } catch (err: any) {
+      console.error("CSV upload error:", err);
+      res.status(500).json({ error: "Upload failed", details: err.message });
     }
-    
-    res.json({
-      success: true,
-      summary: validation.summary,
-      errors: validation.errors,
-    });
-  } catch (err: any) {
-    console.error('CSV upload error:', err);
-    res.status(500).json({ error: 'Upload failed', details: err.message });
   }
-});
+);
 
 // List people
-app.get('/api/people', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const people = await prisma.person.findMany({
-      where: {
-        organizationId: req.organizationId!,
-      },
-      orderBy: {
-        fullName: 'asc',
-      },
-    });
-    
-    res.json({ people });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.get(
+  "/api/people",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const people = await prisma.person.findMany({
+        where: {
+          organizationId: req.organizationId!,
+        },
+        orderBy: {
+          fullName: "asc",
+        },
+      });
+
+      res.json({ people });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Export people as CSV
-app.get('/api/people/export', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const people = await prisma.person.findMany({
-      where: { organizationId: req.organizationId! },
-      orderBy: { fullName: 'asc' },
-    });
+app.get(
+  "/api/people/export",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const people = await prisma.person.findMany({
+        where: { organizationId: req.organizationId! },
+        orderBy: { fullName: "asc" },
+      });
 
-    const escape = (value: string | null | undefined) => {
-      const safe = value ?? '';
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
+      const escape = (value: string | null | undefined) => {
+        const safe = value ?? "";
+        return `"${safe.replace(/"/g, '""')}"`;
+      };
 
-    const header = [
-      'full_name',
-      'first_name',
-      'email',
-      'birthday',
-      'department',
-      'role',
-      'opted_out',
-    ];
+      const header = [
+        "full_name",
+        "first_name",
+        "email",
+        "birthday",
+        "department",
+        "role",
+        "opted_out",
+      ];
 
-    const rows = people.map((person) => [
-      escape(person.fullName),
-      escape(person.firstName || ''),
-      escape(person.email),
-      escape(person.birthday.toISOString().split('T')[0]),
-      escape(person.department || ''),
-      escape(person.role || ''),
-      escape(person.optedOut ? 'true' : 'false'),
-    ]);
+      const rows = people.map((person) => [
+        escape(person.fullName),
+        escape(person.firstName || ""),
+        escape(person.email),
+        escape(person.birthday.toISOString().split("T")[0]),
+        escape(person.department || ""),
+        escape(person.role || ""),
+        escape(person.optedOut ? "true" : "false"),
+      ]);
 
-    const csv = [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
+      const csv = [header.join(","), ...rows.map((row) => row.join(","))].join(
+        "\n"
+      );
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=people.csv');
-    res.send(csv);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=people.csv");
+      res.send(csv);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Get upcoming birthdays (next 30 days)
-app.get('/api/people/upcoming', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const people = await prisma.person.findMany({
-      where: {
-        organizationId: req.organizationId!,
-        optedOut: false,
-      },
-    });
-    
-    const today = new Date();
-    const in30Days = new Date();
-    in30Days.setDate(today.getDate() + 30);
-    
-    // Filter by upcoming birthdays (check month/day only)
-    const upcoming = people.filter(person => {
-      const bday = new Date(person.birthday);
-      const thisYearBirthday = new Date(
-        today.getFullYear(),
-        bday.getMonth(),
-        bday.getDate()
-      );
-      
-      return thisYearBirthday >= today && thisYearBirthday <= in30Days;
-    }).sort((a, b) => {
-      const aBday = new Date(a.birthday);
-      const bBday = new Date(b.birthday);
-      const aThisYear = new Date(today.getFullYear(), aBday.getMonth(), aBday.getDate());
-      const bThisYear = new Date(today.getFullYear(), bBday.getMonth(), bBday.getDate());
-      return aThisYear.getTime() - bThisYear.getTime();
-    });
-    
-    res.json({ upcoming });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.get(
+  "/api/people/upcoming",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const people = await prisma.person.findMany({
+        where: {
+          organizationId: req.organizationId!,
+          optedOut: false,
+        },
+      });
+
+      const today = new Date();
+      const in30Days = new Date();
+      in30Days.setDate(today.getDate() + 30);
+
+      // Filter by upcoming birthdays (check month/day only)
+      const upcoming = people
+        .filter((person) => {
+          const bday = new Date(person.birthday);
+          const thisYearBirthday = new Date(
+            today.getFullYear(),
+            bday.getMonth(),
+            bday.getDate()
+          );
+
+          return thisYearBirthday >= today && thisYearBirthday <= in30Days;
+        })
+        .sort((a, b) => {
+          const aBday = new Date(a.birthday);
+          const bBday = new Date(b.birthday);
+          const aThisYear = new Date(
+            today.getFullYear(),
+            aBday.getMonth(),
+            aBday.getDate()
+          );
+          const bThisYear = new Date(
+            today.getFullYear(),
+            bBday.getMonth(),
+            bBday.getDate()
+          );
+          return aThisYear.getTime() - bThisYear.getTime();
+        });
+
+      res.json({ upcoming });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Download sample CSV
-app.get('/api/people/sample-csv', (req: Request, res: Response) => {
+app.get("/api/people/sample-csv", (req: Request, res: Response) => {
   const csv = CSVValidator.generateSampleCSV();
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=sample-people.csv');
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    "attachment; filename=sample-people.csv"
+  );
   res.send(csv);
 });
 
 // Create person manually (non-CSV).
-app.post('/api/people', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const schema = z.object({
-      firstName: z.string().min(1),
-      lastName: z.string().min(1),
-      fullName: z.string().optional(),
-      email: z.string().email(),
-      birthday: z.string().min(1),
-      department: z.string().optional(),
-      role: z.string().optional(),
-    });
+app.post(
+  "/api/people",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        fullName: z.string().optional(),
+        email: z.string().email(),
+        birthday: z.string().min(1),
+        department: z.string().optional(),
+        role: z.string().optional(),
+      });
 
-    const data = schema.parse(req.body);
-    const birthday = new Date(data.birthday);
+      const data = schema.parse(req.body);
+      const birthday = new Date(data.birthday);
 
-    if (Number.isNaN(birthday.getTime())) {
-      return res.status(400).json({ error: 'Invalid birthday' });
+      if (Number.isNaN(birthday.getTime())) {
+        return res.status(400).json({ error: "Invalid birthday" });
+      }
+
+      const person = await prisma.person.create({
+        data: {
+          organizationId: req.organizationId!,
+          fullName:
+            data.fullName || `${data.firstName} ${data.lastName}`.trim(),
+          firstName: data.firstName,
+          email: data.email.toLowerCase(),
+          birthday,
+          department: data.department,
+          role: data.role,
+        },
+      });
+
+      res.json({ person });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
-
-    const person = await prisma.person.create({
-      data: {
-        organizationId: req.organizationId!,
-        fullName: data.fullName || `${data.firstName} ${data.lastName}`.trim(),
-        firstName: data.firstName,
-        email: data.email.toLowerCase(),
-        birthday,
-        department: data.department,
-        role: data.role,
-      },
-    });
-
-    res.json({ person });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
   }
-});
+);
 
 // Update person
-app.put('/api/people/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const person = await prisma.person.update({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-      data: req.body,
-    });
-    
-    res.json({ person });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.put(
+  "/api/people/:id",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const person = await prisma.person.update({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+        data: req.body,
+      });
+
+      res.json({ person });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Delete person
-app.delete('/api/people/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    await prisma.person.delete({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
-    
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.delete(
+  "/api/people/:id",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      await prisma.person.delete({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Bulk delete people
-app.post('/api/people/bulk-delete', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const schema = z.object({
-      ids: z.array(z.string().min(1)).min(1),
-    });
+app.post(
+  "/api/people/bulk-delete",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        ids: z.array(z.string().min(1)).min(1),
+      });
 
-    const { ids } = schema.parse(req.body);
+      const { ids } = schema.parse(req.body);
 
-    const result = await prisma.person.deleteMany({
-      where: {
-        organizationId: req.organizationId!,
-        id: { in: ids },
-      },
-    });
+      const result = await prisma.person.deleteMany({
+        where: {
+          organizationId: req.organizationId!,
+          id: { in: ids },
+        },
+      });
 
-    res.json({ success: true, deleted: result.count });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+      res.json({ success: true, deleted: result.count });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   }
-});
+);
 
 // Bulk opt-out or opt-in people
-app.post('/api/people/bulk-opt-out', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const schema = z.object({
-      ids: z.array(z.string().min(1)).min(1),
-      optedOut: z.boolean().default(true),
-    });
+app.post(
+  "/api/people/bulk-opt-out",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        ids: z.array(z.string().min(1)).min(1),
+        optedOut: z.boolean().default(true),
+      });
 
-    const { ids, optedOut } = schema.parse(req.body);
+      const { ids, optedOut } = schema.parse(req.body);
 
-    const result = await prisma.person.updateMany({
-      where: {
-        organizationId: req.organizationId!,
-        id: { in: ids },
-      },
-      data: { optedOut },
-    });
+      const result = await prisma.person.updateMany({
+        where: {
+          organizationId: req.organizationId!,
+          id: { in: ids },
+        },
+        data: { optedOut },
+      });
 
-    res.json({ success: true, updated: result.count });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+      res.json({ success: true, updated: result.count });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   }
-});
+);
 
 // Send birthday email now (manual trigger per person).
-app.post('/api/people/:id/send-birthday', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
+app.post(
+  "/api/people/:id/send-birthday",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
 
-    const person = await prisma.person.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
+      const person = await prisma.person.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
 
-    if (!person) {
-      return res.status(404).json({ error: 'Person not found' });
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+
+      if (person.optedOut) {
+        return res.status(400).json({ error: "Person has opted out" });
+      }
+
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      const template = await prisma.template.findFirst({
+        where: {
+          organizationId: req.organizationId!,
+          isDefault: true,
+        },
+      });
+
+      if (!template) {
+        return res.status(400).json({ error: "No default template found" });
+      }
+
+      const variables = {
+        first_name: person.firstName || person.fullName.split(" ")[0],
+        full_name: person.fullName,
+        organization_name: org?.name || "Your Organization",
+        date: new Date().toLocaleDateString(),
+      };
+
+      const subject = interpolateTemplate(template.subject, variables);
+      const content = interpolateTemplate(template.content, variables);
+
+      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+
+      if (!fromEmail) {
+        return res.status(400).json({ error: "Sender email not configured" });
+      }
+
+      const result = await EmailService.send({
+        to: person.email,
+        subject,
+        html: template.type === "HTML" ? content : undefined,
+        text: template.type === "PLAIN_TEXT" ? content : undefined,
+        from: {
+          name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
+          email: fromEmail,
+        },
+      });
+
+      await prisma.deliveryLog.create({
+        data: {
+          personId: person.id,
+          templateId: template.id,
+          organizationId: req.organizationId!,
+          status: "SENT",
+          scheduledFor: new Date(),
+          sentAt: new Date(),
+          externalId: result.id,
+        },
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    if (person.optedOut) {
-      return res.status(400).json({ error: 'Person has opted out' });
-    }
-
-    const org = await prisma.organization.findUnique({
-      where: { id: req.organizationId! },
-    });
-
-    const template = await prisma.template.findFirst({
-      where: {
-        organizationId: req.organizationId!,
-        isDefault: true,
-      },
-    });
-
-    if (!template) {
-      return res.status(400).json({ error: 'No default template found' });
-    }
-
-    const variables = {
-      first_name: person.firstName || person.fullName.split(' ')[0],
-      full_name: person.fullName,
-      organization_name: org?.name || 'Your Organization',
-      date: new Date().toLocaleDateString(),
-    };
-
-    const subject = interpolateTemplate(template.subject, variables);
-    const content = interpolateTemplate(template.content, variables);
-
-    const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
-
-    if (!fromEmail) {
-      return res.status(400).json({ error: 'Sender email not configured' });
-    }
-
-    const result = await EmailService.send({
-      to: person.email,
-      subject,
-      html: template.type === 'HTML' ? content : undefined,
-      text: template.type === 'PLAIN_TEXT' ? content : undefined,
-      from: {
-        name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || '',
-        email: fromEmail,
-      },
-    });
-
-    await prisma.deliveryLog.create({
-      data: {
-        personId: person.id,
-        templateId: template.id,
-        organizationId: req.organizationId!,
-        status: 'SENT',
-        scheduledFor: new Date(),
-        sentAt: new Date(),
-        externalId: result.id,
-      },
-    });
-
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // ============================================================================
 // SETTINGS ROUTES
 // ============================================================================
 
-app.get('/api/settings', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const org = await prisma.organization.findUnique({
-      where: { id: req.organizationId! },
-    });
-    
-    res.json({ organization: org });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get(
+  "/api/settings",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
 
-app.put('/api/settings', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const org = await prisma.organization.update({
-      where: { id: req.organizationId! },
-      data: req.body,
-    });
-    
-    res.json({ organization: org });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+      res.json({ organization: org });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
+
+app.put(
+  "/api/settings",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const org = await prisma.organization.update({
+        where: { id: req.organizationId! },
+        data: req.body,
+      });
+
+      res.json({ organization: org });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 // ============================================================================
 // TEMPLATE ROUTES
 // ============================================================================
 
 // List templates
-app.get('/api/templates', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const templates = await prisma.template.findMany({
-      where: {
-        organizationId: req.organizationId!,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-    
-    res.json({ templates });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.get(
+  "/api/templates",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const templates = await prisma.template.findMany({
+        where: {
+          organizationId: req.organizationId!,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      res.json({ templates });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Get single template
-app.get('/api/templates/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const template = await prisma.template.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
-    
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+app.get(
+  "/api/templates/:id",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const template = await prisma.template.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
+
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      res.json({ template });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    
-    res.json({ template });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // Create template (first template becomes default).
-app.post('/api/templates', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const schema = z.object({
-      name: z.string().min(1),
-      type: z.enum(['PLAIN_TEXT', 'HTML', 'CUSTOM_IMAGE']),
-      subject: z.string().min(1),
-      content: z.string().min(1),
-      imageUrl: z.string().optional(),
-    });
-    
-    const data = schema.parse(req.body);
+app.post(
+  "/api/templates",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1),
+        type: z.enum(["PLAIN_TEXT", "HTML", "CUSTOM_IMAGE"]),
+        subject: z.string().min(1),
+        content: z.string().min(1),
+        imageUrl: z.string().optional(),
+      });
 
-    const existingDefault = await prisma.template.findFirst({
-      where: {
-        organizationId: req.organizationId!,
-        isDefault: true,
-      },
-    });
+      const data = schema.parse(req.body);
 
-    const template = await prisma.template.create({
-      data: {
-        ...data,
-        organizationId: req.organizationId!,
-        isDefault: !existingDefault,
-        isActive: true,
-      },
-    });
-    
-    res.json({ template });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
+      const existingDefault = await prisma.template.findFirst({
+        where: {
+          organizationId: req.organizationId!,
+          isDefault: true,
+        },
+      });
+
+      const template = await prisma.template.create({
+        data: {
+          ...data,
+          organizationId: req.organizationId!,
+          isDefault: !existingDefault,
+          isActive: true,
+        },
+      });
+
+      res.json({ template });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   }
-});
+);
 
 // Update template; default selection forces active and clears other defaults.
-app.put('/api/templates/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
+app.put(
+  "/api/templates/:id",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
 
-    const data = req.body;
+      const data = req.body;
 
-    let template;
-    if (data?.isDefault === true) {
-      const [updated] = await prisma.$transaction([
-        prisma.template.update({
+      let template;
+      if (data?.isDefault === true) {
+        const [updated] = await prisma.$transaction([
+          prisma.template.update({
+            where: {
+              id,
+              organizationId: req.organizationId!,
+            },
+            data: {
+              ...data,
+              isDefault: true,
+              isActive: true,
+            },
+          }),
+          prisma.template.updateMany({
+            where: {
+              organizationId: req.organizationId!,
+              id: { not: id },
+              isDefault: true,
+            },
+            data: { isDefault: false },
+          }),
+        ]);
+        template = updated;
+      } else {
+        template = await prisma.template.update({
           where: {
             id,
             organizationId: req.organizationId!,
           },
-          data: {
-            ...data,
-            isDefault: true,
-            isActive: true,
-          },
-        }),
-        prisma.template.updateMany({
+          data,
+        });
+
+        if (data?.isDefault === false && template.isDefault === false) {
+          const existingDefault = await prisma.template.findFirst({
+            where: {
+              organizationId: req.organizationId!,
+              isDefault: true,
+            },
+          });
+
+          if (!existingDefault) {
+            await prisma.template.update({
+              where: { id: template.id },
+              data: { isDefault: true, isActive: true },
+            });
+            template = await prisma.template.findUnique({
+              where: { id: template.id },
+            });
+          }
+        }
+      }
+
+      res.json({ template });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Delete template; keep at least one default template per org.
+app.delete(
+  "/api/templates/:id",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const existing = await prisma.template.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      if (existing.isDefault) {
+        const alternative = await prisma.template.findFirst({
           where: {
             organizationId: req.organizationId!,
             id: { not: id },
-            isDefault: true,
           },
-          data: { isDefault: false },
-        }),
-      ]);
-      template = updated;
-    } else {
-      template = await prisma.template.update({
-        where: {
-          id,
-          organizationId: req.organizationId!,
-        },
-        data,
-      });
-
-      if (data?.isDefault === false && template.isDefault === false) {
-        const existingDefault = await prisma.template.findFirst({
-          where: {
-            organizationId: req.organizationId!,
-            isDefault: true,
-          },
+          orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
         });
 
-        if (!existingDefault) {
-          await prisma.template.update({
-            where: { id: template.id },
-            data: { isDefault: true, isActive: true },
-          });
-          template = await prisma.template.findUnique({ where: { id: template.id } });
+        if (!alternative) {
+          return res
+            .status(400)
+            .json({ error: "Cannot delete the only default template" });
         }
-      }
-    }
-    
-    res.json({ template });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// Delete template; keep at least one default template per org.
-app.delete('/api/templates/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    const existing = await prisma.template.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-
-    if (existing.isDefault) {
-      const alternative = await prisma.template.findFirst({
-        where: {
-          organizationId: req.organizationId!,
-          id: { not: id },
-        },
-        orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
-      });
-
-      if (!alternative) {
-        return res.status(400).json({ error: 'Cannot delete the only default template' });
-      }
-
-      await prisma.$transaction([
-        prisma.template.delete({
+        await prisma.$transaction([
+          prisma.template.delete({
+            where: {
+              id,
+              organizationId: req.organizationId!,
+            },
+          }),
+          prisma.template.update({
+            where: { id: alternative.id },
+            data: { isDefault: true, isActive: true },
+          }),
+        ]);
+      } else {
+        await prisma.template.delete({
           where: {
             id,
             organizationId: req.organizationId!,
           },
-        }),
-        prisma.template.update({
-          where: { id: alternative.id },
-          data: { isDefault: true, isActive: true },
-        }),
-      ]);
-    } else {
-      await prisma.template.delete({
+        });
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Preview template with sample data
+app.post(
+  "/api/templates/:id/preview",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const template = await prisma.template.findFirst({
         where: {
           id,
           organizationId: req.organizationId!,
         },
       });
-    }
 
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
 
-// Preview template with sample data
-app.post('/api/templates/:id/preview', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const template = await prisma.template.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
-    
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      // Sample data for preview
+      const sampleData = {
+        first_name: "John",
+        full_name: "John Doe",
+        organization_name: org?.name || "Your Organization",
+        date: new Date().toLocaleDateString(),
+      };
+
+      // Interpolate variables
+      let previewSubject = template.subject;
+      let previewContent = template.content;
+
+      Object.entries(sampleData).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, "g");
+        previewSubject = previewSubject.replace(regex, value);
+        previewContent = previewContent.replace(regex, value);
+      });
+
+      res.json({
+        subject: previewSubject,
+        content: previewContent,
+        type: template.type,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    
-    const org = await prisma.organization.findUnique({
-      where: { id: req.organizationId! },
-    });
-    
-    // Sample data for preview
-    const sampleData = {
-      first_name: 'John',
-      full_name: 'John Doe',
-      organization_name: org?.name || 'Your Organization',
-      date: new Date().toLocaleDateString(),
-    };
-    
-    // Interpolate variables
-    let previewSubject = template.subject;
-    let previewContent = template.content;
-    
-    Object.entries(sampleData).forEach(([key, value]) => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      previewSubject = previewSubject.replace(regex, value);
-      previewContent = previewContent.replace(regex, value);
-    });
-    
-    res.json({
-      subject: previewSubject,
-      content: previewContent,
-      type: template.type,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // Test send template (sends to current user's email)
-app.post('/api/templates/:id/test', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const template = await prisma.template.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-    });
-    
-    if (!template) {
-      return res.status(404).json({ error: 'Template not found' });
+app.post(
+  "/api/templates/:id/test",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const template = await prisma.template.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
+
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId! },
+      });
+
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      // Sample data for test email
+      const sampleData = {
+        first_name: user?.email.split("@")[0] || "You",
+        full_name: user?.email.split("@")[0] || "You",
+        organization_name: org?.name || "Your Organization",
+        date: new Date().toLocaleDateString(),
+      };
+
+      // Interpolate variables
+      let emailSubject = template.subject;
+      let emailContent = template.content;
+
+      Object.entries(sampleData).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, "g");
+        emailSubject = emailSubject.replace(regex, value);
+        emailContent = emailContent.replace(regex, value);
+      });
+
+      // Send actual email via Resend
+      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+
+      if (!fromEmail) {
+        return res.status(400).json({ error: "Sender email not configured" });
+      }
+
+      const result = await EmailService.send({
+        to: user!.email,
+        subject: emailSubject,
+        html: template.type === "HTML" ? emailContent : undefined,
+        text: template.type === "PLAIN_TEXT" ? emailContent : undefined,
+        from: {
+          name: org?.name || DEFAULT_FROM_NAME || "",
+          email: fromEmail,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: `Test email sent to ${user?.email}`,
+        emailId: result.id,
+      });
+    } catch (err: any) {
+      console.error("Test send error:", err);
+      res.status(500).json({ error: err.message });
     }
-    
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-    });
-
-    const org = await prisma.organization.findUnique({
-      where: { id: req.organizationId! },
-    });
-
-    // Sample data for test email
-    const sampleData = {
-      first_name: user?.email.split('@')[0] || 'You',
-      full_name: user?.email.split('@')[0] || 'You',
-      organization_name: org?.name || 'Your Organization',
-      date: new Date().toLocaleDateString(),
-    };
-
-    // Interpolate variables
-    let emailSubject = template.subject;
-    let emailContent = template.content;
-
-    Object.entries(sampleData).forEach(([key, value]) => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      emailSubject = emailSubject.replace(regex, value);
-      emailContent = emailContent.replace(regex, value);
-    });
-
-    // Send actual email via Resend
-    const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
-
-    if (!fromEmail) {
-      return res.status(400).json({ error: 'Sender email not configured' });
-    }
-
-    const result = await EmailService.send({
-      to: user!.email,
-      subject: emailSubject,
-      html: template.type === 'HTML' ? emailContent : undefined,
-      text: template.type === 'PLAIN_TEXT' ? emailContent : undefined,
-      from: {
-        name: org?.name || DEFAULT_FROM_NAME || '',
-        email: fromEmail,
-      },
-    });
-    
-    res.json({
-      success: true,
-      message: `Test email sent to ${user?.email}`,
-      emailId: result.id,
-    });
-  } catch (err: any) {
-    console.error('Test send error:', err);
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // Create default templates on first login (helper endpoint)
-app.post('/api/templates/create-defaults', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const existing = await prisma.template.findMany({
-      where: { organizationId: req.organizationId! },
-      select: { name: true },
-    });
+app.post(
+  "/api/templates/create-defaults",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const existing = await prisma.template.findMany({
+        where: { organizationId: req.organizationId! },
+        select: { name: true },
+      });
 
-    const existingNames = new Set(existing.map((template) => template.name));
-    
-    const org = await prisma.organization.findUnique({
-      where: { id: req.organizationId! },
-    });
-    
-    const defaultTemplates = [
-      {
-        name: 'Simple Birthday',
-        type: 'PLAIN_TEXT' as const,
-        subject: 'Happy Birthday {{first_name}}! 🎉',
-        content: `Happy Birthday {{first_name}}!
+      const existingNames = new Set(existing.map((template) => template.name));
+
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      const defaultTemplates = [
+        {
+          name: "Simple Birthday",
+          type: "PLAIN_TEXT" as const,
+          subject: "Happy Birthday {{first_name}}! 🎉",
+          content: `Happy Birthday {{first_name}}!
 
 Wishing you a wonderful day filled with joy and happiness.
 
 From everyone at {{organization_name}}`,
-        isDefault: true,
-        isActive: true,
-      },
-      {
-        name: 'Professional Birthday',
-        type: 'HTML' as const,
-        subject: 'Happy Birthday {{first_name}}!',
-        content: `<html>
+          isDefault: true,
+          isActive: true,
+        },
+        {
+          name: "Professional Birthday",
+          type: "HTML" as const,
+          subject: "Happy Birthday {{first_name}}!",
+          content: `<html>
 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center; border-radius: 8px 8px 0 0;">
     <h1 style="color: white; margin: 0; font-size: 32px;">🎉 Happy Birthday! 🎉</h1>
@@ -1230,14 +1372,14 @@ From everyone at {{organization_name}}`,
   </div>
 </body>
 </html>`,
-        isDefault: false,
-        isActive: false,
-      },
-      {
-        name: 'Fun & Colorful',
-        type: 'HTML' as const,
-        subject: '🎂 It\'s Your Special Day, {{first_name}}! 🎈',
-        content: `<html>
+          isDefault: false,
+          isActive: false,
+        },
+        {
+          name: "Fun & Colorful",
+          type: "HTML" as const,
+          subject: "🎂 It's Your Special Day, {{first_name}}! 🎈",
+          content: `<html>
 <body style="font-family: 'Comic Sans MS', cursive, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #fef3c7;">
   <div style="background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
     <div style="text-align: center; margin-bottom: 30px;">
@@ -1269,37 +1411,40 @@ From everyone at {{organization_name}}`,
   </div>
 </body>
 </html>`,
-        isDefault: false,
-        isActive: false,
-      },
-    ];
-    
-    const toCreate = defaultTemplates.filter((template) => !existingNames.has(template.name));
+          isDefault: false,
+          isActive: false,
+        },
+      ];
 
-    if (toCreate.length === 0) {
-      return res.json({ message: 'Default templates already exist' });
+      const toCreate = defaultTemplates.filter(
+        (template) => !existingNames.has(template.name)
+      );
+
+      if (toCreate.length === 0) {
+        return res.json({ message: "Default templates already exist" });
+      }
+
+      const created = await Promise.all(
+        toCreate.map((template) =>
+          prisma.template.create({
+            data: {
+              ...template,
+              organizationId: req.organizationId!,
+            },
+          })
+        )
+      );
+
+      res.json({
+        success: true,
+        message: "Default templates created",
+        count: created.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-
-    const created = await Promise.all(
-      toCreate.map(template =>
-        prisma.template.create({
-          data: {
-            ...template,
-            organizationId: req.organizationId!,
-          },
-        })
-      )
-    );
-    
-    res.json({
-      success: true,
-      message: 'Default templates created',
-      count: created.length,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // ============================================================================
 // START SERVER
@@ -1310,391 +1455,418 @@ From everyone at {{organization_name}}`,
 // ============================================================================
 
 // Get dashboard overview stats
-app.get('/api/admin/overview', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const orgId = req.organizationId!;
-    
-    // Get counts
-    const peopleCount = await prisma.person.count({
-      where: { organizationId: orgId, optedOut: false },
-    });
-    
-    const templateCount = await prisma.template.count({
-      where: { organizationId: orgId },
-    });
-    
-    const activeTemplateCount = await prisma.template.count({
-      where: { organizationId: orgId, isActive: true },
-    });
-    
-    // Get today's deliveries
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const todayDeliveries = await prisma.deliveryLog.count({
-      where: {
-        organizationId: orgId,
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
+app.get(
+  "/api/admin/overview",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const orgId = req.organizationId!;
+
+      // Get counts
+      const peopleCount = await prisma.person.count({
+        where: { organizationId: orgId, optedOut: false },
+      });
+
+      const templateCount = await prisma.template.count({
+        where: { organizationId: orgId },
+      });
+
+      const activeTemplateCount = await prisma.template.count({
+        where: { organizationId: orgId, isActive: true },
+      });
+
+      // Get today's deliveries
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const todayDeliveries = await prisma.deliveryLog.count({
+        where: {
+          organizationId: orgId,
+          createdAt: {
+            gte: today,
+            lt: tomorrow,
+          },
         },
-      },
-    });
-    
-    const todaySuccessful = await prisma.deliveryLog.count({
-      where: {
-        organizationId: orgId,
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
+      });
+
+      const todaySuccessful = await prisma.deliveryLog.count({
+        where: {
+          organizationId: orgId,
+          createdAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          status: { in: ["SENT", "DELIVERED"] },
         },
-        status: { in: ['SENT', 'DELIVERED'] },
-      },
-    });
-    
-    const todayFailed = await prisma.deliveryLog.count({
-      where: {
-        organizationId: orgId,
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
+      });
+
+      const todayFailed = await prisma.deliveryLog.count({
+        where: {
+          organizationId: orgId,
+          createdAt: {
+            gte: today,
+            lt: tomorrow,
+          },
+          status: "FAILED",
         },
-        status: 'FAILED',
-      },
-    });
-    
-    // Get upcoming birthdays (next 7 days)
-    const people = await prisma.person.findMany({
-      where: {
-        organizationId: orgId,
-        optedOut: false,
-      },
-    });
-    
-    const now = new Date();
-    const in7Days = new Date();
-    in7Days.setDate(now.getDate() + 7);
-    
-    const upcomingBirthdays = people.filter(person => {
-      const bday = new Date(person.birthday);
-      const thisYearBirthday = new Date(
-        now.getFullYear(),
-        bday.getMonth(),
-        bday.getDate()
-      );
-      return thisYearBirthday >= now && thisYearBirthday <= in7Days;
-    }).length;
-    
-    // Get recent activity (last 10 deliveries)
-    const recentActivity = await prisma.deliveryLog.findMany({
-      where: { organizationId: orgId },
-      include: {
-        person: true,
-        template: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
-    
-    res.json({
-      stats: {
-        totalPeople: peopleCount,
-        totalTemplates: templateCount,
-        activeTemplates: activeTemplateCount,
-        upcomingBirthdays,
-        todayDeliveries: {
-          total: todayDeliveries,
-          successful: todaySuccessful,
-          failed: todayFailed,
+      });
+
+      // Get upcoming birthdays (next 7 days)
+      const people = await prisma.person.findMany({
+        where: {
+          organizationId: orgId,
+          optedOut: false,
         },
-      },
-      recentActivity: recentActivity.map(log => ({
-        id: log.id,
-        personName: log.person.fullName,
-        personEmail: log.person.email,
-        templateName: log.template.name,
-        status: log.status,
-        scheduledFor: log.scheduledFor,
-        sentAt: log.sentAt,
-        errorMessage: log.errorMessage,
-        createdAt: log.createdAt,
-      })),
-    });
-  } catch (err: any) {
-    console.error('Overview error:', err);
-    res.status(500).json({ error: err.message });
+      });
+
+      const now = new Date();
+      const in7Days = new Date();
+      in7Days.setDate(now.getDate() + 7);
+
+      const upcomingBirthdays = people.filter((person) => {
+        const bday = new Date(person.birthday);
+        const thisYearBirthday = new Date(
+          now.getFullYear(),
+          bday.getMonth(),
+          bday.getDate()
+        );
+        return thisYearBirthday >= now && thisYearBirthday <= in7Days;
+      }).length;
+
+      // Get recent activity (last 10 deliveries)
+      const recentActivity = await prisma.deliveryLog.findMany({
+        where: { organizationId: orgId },
+        include: {
+          person: true,
+          template: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
+
+      res.json({
+        stats: {
+          totalPeople: peopleCount,
+          totalTemplates: templateCount,
+          activeTemplates: activeTemplateCount,
+          upcomingBirthdays,
+          todayDeliveries: {
+            total: todayDeliveries,
+            successful: todaySuccessful,
+            failed: todayFailed,
+          },
+        },
+        recentActivity: recentActivity.map((log) => ({
+          id: log.id,
+          personName: log.person.fullName,
+          personEmail: log.person.email,
+          templateName: log.template.name,
+          status: log.status,
+          scheduledFor: log.scheduledFor,
+          sentAt: log.sentAt,
+          errorMessage: log.errorMessage,
+          createdAt: log.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      console.error("Overview error:", err);
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // Get delivery logs with pagination and filters
-app.get('/api/admin/delivery-logs', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { page = '1', limit = '50', status, dateFrom, dateTo } = req.query;
-    
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
-    
-    const where: any = {
-      organizationId: req.organizationId!,
-    };
-    
-    if (status) {
-      where.status = status;
-    }
-    
-    if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom as string);
+app.get(
+  "/api/admin/delivery-logs",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "50", status, dateFrom, dateTo } = req.query;
+
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: any = {
+        organizationId: req.organizationId!,
+      };
+
+      if (status) {
+        where.status = status;
       }
-      if (dateTo) {
-        const endDate = new Date(dateTo as string);
-        endDate.setHours(23, 59, 59, 999);
-        where.createdAt.lte = endDate;
+
+      if (dateFrom || dateTo) {
+        where.createdAt = {};
+        if (dateFrom) {
+          where.createdAt.gte = new Date(dateFrom as string);
+        }
+        if (dateTo) {
+          const endDate = new Date(dateTo as string);
+          endDate.setHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
+        }
       }
+
+      const [logs, total] = await Promise.all([
+        prisma.deliveryLog.findMany({
+          where,
+          include: {
+            person: true,
+            template: true,
+          },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limitNum,
+        }),
+        prisma.deliveryLog.count({ where }),
+      ]);
+
+      res.json({
+        logs: logs.map((log) => ({
+          id: log.id,
+          person: {
+            name: log.person.fullName,
+            email: log.person.email,
+          },
+          template: {
+            name: log.template.name,
+            type: log.template.type,
+          },
+          status: log.status,
+          scheduledFor: log.scheduledFor,
+          sentAt: log.sentAt,
+          deliveredAt: log.deliveredAt,
+          errorMessage: log.errorMessage,
+          retryCount: log.retryCount,
+          externalId: log.externalId,
+          createdAt: log.createdAt,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      console.error("Delivery logs error:", err);
+      res.status(500).json({ error: err.message });
     }
-    
-    const [logs, total] = await Promise.all([
-      prisma.deliveryLog.findMany({
+  }
+);
+
+// Export delivery logs as CSV
+app.get(
+  "/api/admin/delivery-logs/export",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, dateFrom, dateTo } = req.query;
+
+      const where: any = {
+        organizationId: req.organizationId!,
+      };
+
+      if (status) {
+        where.status = status;
+      }
+
+      if (dateFrom || dateTo) {
+        where.createdAt = {};
+        if (dateFrom) {
+          where.createdAt.gte = new Date(dateFrom as string);
+        }
+        if (dateTo) {
+          const endDate = new Date(dateTo as string);
+          endDate.setHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
+        }
+      }
+
+      const logs = await prisma.deliveryLog.findMany({
         where,
         include: {
           person: true,
           template: true,
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limitNum,
-      }),
-      prisma.deliveryLog.count({ where }),
-    ]);
-    
-    res.json({
-      logs: logs.map(log => ({
-        id: log.id,
-        person: {
-          name: log.person.fullName,
-          email: log.person.email,
-        },
-        template: {
-          name: log.template.name,
-          type: log.template.type,
-        },
-        status: log.status,
-        scheduledFor: log.scheduledFor,
-        sentAt: log.sentAt,
-        deliveredAt: log.deliveredAt,
-        errorMessage: log.errorMessage,
-        retryCount: log.retryCount,
-        externalId: log.externalId,
-        createdAt: log.createdAt,
-      })),
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages: Math.ceil(total / limitNum),
-      },
-    });
-  } catch (err: any) {
-    console.error('Delivery logs error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+        orderBy: { createdAt: "desc" },
+      });
 
-// Export delivery logs as CSV
-app.get('/api/admin/delivery-logs/export', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { status, dateFrom, dateTo } = req.query;
+      const escape = (value: string | null | undefined) => {
+        const safe = value ?? "";
+        return `"${safe.replace(/"/g, '""')}"`;
+      };
 
-    const where: any = {
-      organizationId: req.organizationId!,
-    };
+      const header = [
+        "person_name",
+        "person_email",
+        "template_name",
+        "template_type",
+        "status",
+        "scheduled_for",
+        "sent_at",
+        "delivered_at",
+        "error_message",
+        "retry_count",
+        "external_id",
+        "created_at",
+      ];
 
-    if (status) {
-      where.status = status;
+      const rows = logs.map((log) => [
+        escape(log.person.fullName),
+        escape(log.person.email),
+        escape(log.template.name),
+        escape(log.template.type),
+        escape(log.status),
+        escape(log.scheduledFor?.toISOString() || ""),
+        escape(log.sentAt?.toISOString() || ""),
+        escape(log.deliveredAt?.toISOString() || ""),
+        escape(log.errorMessage || ""),
+        escape(String(log.retryCount ?? 0)),
+        escape(log.externalId || ""),
+        escape(log.createdAt.toISOString()),
+      ]);
+
+      const csv = [header.join(","), ...rows.map((row) => row.join(","))].join(
+        "\n"
+      );
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=delivery-logs.csv"
+      );
+      res.send(csv);
+    } catch (err: any) {
+      console.error("Delivery logs export error:", err);
+      res.status(500).json({ error: err.message });
     }
-
-    if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom as string);
-      }
-      if (dateTo) {
-        const endDate = new Date(dateTo as string);
-        endDate.setHours(23, 59, 59, 999);
-        where.createdAt.lte = endDate;
-      }
-    }
-
-    const logs = await prisma.deliveryLog.findMany({
-      where,
-      include: {
-        person: true,
-        template: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const escape = (value: string | null | undefined) => {
-      const safe = value ?? '';
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
-
-    const header = [
-      'person_name',
-      'person_email',
-      'template_name',
-      'template_type',
-      'status',
-      'scheduled_for',
-      'sent_at',
-      'delivered_at',
-      'error_message',
-      'retry_count',
-      'external_id',
-      'created_at',
-    ];
-
-    const rows = logs.map((log) => [
-      escape(log.person.fullName),
-      escape(log.person.email),
-      escape(log.template.name),
-      escape(log.template.type),
-      escape(log.status),
-      escape(log.scheduledFor?.toISOString() || ''),
-      escape(log.sentAt?.toISOString() || ''),
-      escape(log.deliveredAt?.toISOString() || ''),
-      escape(log.errorMessage || ''),
-      escape(String(log.retryCount ?? 0)),
-      escape(log.externalId || ''),
-      escape(log.createdAt.toISOString()),
-    ]);
-
-    const csv = [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=delivery-logs.csv');
-    res.send(csv);
-  } catch (err: any) {
-    console.error('Delivery logs export error:', err);
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // Get delivery stats by date range
-app.get('/api/admin/delivery-stats', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { dateFrom, dateTo } = req.query;
-    
-    const where: any = {
-      organizationId: req.organizationId!,
-    };
-    
-    if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom as string);
+app.get(
+  "/api/admin/delivery-stats",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+
+      const where: any = {
+        organizationId: req.organizationId!,
+      };
+
+      if (dateFrom || dateTo) {
+        where.createdAt = {};
+        if (dateFrom) {
+          where.createdAt.gte = new Date(dateFrom as string);
+        }
+        if (dateTo) {
+          const endDate = new Date(dateTo as string);
+          endDate.setHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
+        }
+      } else {
+        // Default to last 30 days
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        where.createdAt = { gte: thirtyDaysAgo };
       }
-      if (dateTo) {
-        const endDate = new Date(dateTo as string);
-        endDate.setHours(23, 59, 59, 999);
-        where.createdAt.lte = endDate;
-      }
-    } else {
-      // Default to last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      where.createdAt = { gte: thirtyDaysAgo };
+
+      const logs = await prisma.deliveryLog.findMany({
+        where,
+        select: {
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      // Count by status
+      const statusCounts = logs.reduce((acc: any, log) => {
+        acc[log.status] = (acc[log.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Group by date
+      const byDate: any = {};
+      logs.forEach((log) => {
+        const date = log.createdAt.toISOString().split("T")[0];
+        if (!byDate[date]) {
+          byDate[date] = { total: 0, successful: 0, failed: 0 };
+        }
+        byDate[date].total++;
+        if (["SENT", "DELIVERED"].includes(log.status)) {
+          byDate[date].successful++;
+        } else if (log.status === "FAILED") {
+          byDate[date].failed++;
+        }
+      });
+
+      res.json({
+        total: logs.length,
+        byStatus: statusCounts,
+        byDate: Object.entries(byDate).map(([date, stats]) => ({
+          date,
+          ...(stats as Record<string, number>),
+        })),
+      });
+    } catch (err: any) {
+      console.error("Delivery stats error:", err);
+      res.status(500).json({ error: err.message });
     }
-    
-    const logs = await prisma.deliveryLog.findMany({
-      where,
-      select: {
-        status: true,
-        createdAt: true,
-      },
-    });
-    
-    // Count by status
-    const statusCounts = logs.reduce((acc: any, log) => {
-      acc[log.status] = (acc[log.status] || 0) + 1;
-      return acc;
-    }, {});
-    
-    // Group by date
-    const byDate: any = {};
-    logs.forEach(log => {
-      const date = log.createdAt.toISOString().split('T')[0];
-      if (!byDate[date]) {
-        byDate[date] = { total: 0, successful: 0, failed: 0 };
-      }
-      byDate[date].total++;
-      if (['SENT', 'DELIVERED'].includes(log.status)) {
-        byDate[date].successful++;
-      } else if (log.status === 'FAILED') {
-        byDate[date].failed++;
-      }
-    });
-    
-    res.json({
-      total: logs.length,
-      byStatus: statusCounts,
-      byDate: Object.entries(byDate).map(([date, stats]) => ({
-        date,
-        ...(stats as Record<string, number>),
-      })),
-    });
-  } catch (err: any) {
-    console.error('Delivery stats error:', err);
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 // Retry failed delivery
-app.post('/api/admin/delivery-logs/:id/retry', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    const log = await prisma.deliveryLog.findFirst({
-      where: {
-        id,
-        organizationId: req.organizationId!,
-      },
-      include: {
-        person: true,
-        template: true,
-      },
-    });
-    
-    if (!log) {
-      return res.status(404).json({ error: 'Delivery log not found' });
+app.post(
+  "/api/admin/delivery-logs/:id/retry",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const log = await prisma.deliveryLog.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+        include: {
+          person: true,
+          template: true,
+        },
+      });
+
+      if (!log) {
+        return res.status(404).json({ error: "Delivery log not found" });
+      }
+
+      if (log.status !== "FAILED") {
+        return res
+          .status(400)
+          .json({ error: "Only failed deliveries can be retried" });
+      }
+
+      // Update status to queued for retry
+      await prisma.deliveryLog.update({
+        where: { id },
+        data: {
+          status: "QUEUED",
+          retryCount: log.retryCount + 1,
+          errorMessage: null,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: "Delivery queued for retry",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
-    
-    if (log.status !== 'FAILED') {
-      return res.status(400).json({ error: 'Only failed deliveries can be retried' });
-    }
-    
-    // Update status to queued for retry
-    await prisma.deliveryLog.update({
-      where: { id },
-      data: {
-        status: 'QUEUED',
-        retryCount: log.retryCount + 1,
-        errorMessage: null,
-      },
-    });
-    
-    res.json({
-      success: true,
-      message: 'Delivery queued for retry',
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
 const PORT = process.env.PORT || 3001;
 
