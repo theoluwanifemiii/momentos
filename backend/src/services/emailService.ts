@@ -21,7 +21,7 @@ export class EmailService {
         to: params.to,
         subject: params.subject,
         html: params.html,
-        text: params.text,
+        text: params.text ?? '',
       });
 
       if (result.error) {

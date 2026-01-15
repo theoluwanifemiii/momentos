@@ -24,7 +24,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
 // JWT Secret (required via env)
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET ?? '';
 const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL;
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 
@@ -147,7 +147,10 @@ async function authenticate(req: AuthRequest, res: Response, next: NextFunction)
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; organizationId: string };
+    const decoded = jwt.verify(token, JWT_SECRET as jwt.Secret) as unknown as {
+      userId: string;
+      organizationId: string;
+    };
     req.userId = decoded.userId;
     req.organizationId = decoded.organizationId;
     
@@ -1641,7 +1644,7 @@ app.get('/api/admin/delivery-stats', authenticate, async (req: AuthRequest, res:
       byStatus: statusCounts,
       byDate: Object.entries(byDate).map(([date, stats]) => ({
         date,
-        ...stats,
+        ...(stats as Record<string, number>),
       })),
     });
   } catch (err: any) {
