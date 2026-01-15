@@ -49,7 +49,7 @@ class ResendEmailProvider implements EmailProvider {
       to: params.to,
       subject: params.subject,
       html: params.html,
-      text: params.text,
+      text: params.text ?? '',
     });
 
     if (result.error) {
@@ -155,8 +155,8 @@ class BirthdayScheduler {
     });
 
     // Check for upcoming birthdays (2 days ahead for admin notification)
-    const upcomingBirthdays = org.people.filter(
-      this.getUpcomingBirthdays(2)
+    const upcomingBirthdays = org.people.filter((person: any) =>
+      this.getUpcomingBirthdays(2)(person.birthday)
     );
 
     if (upcomingBirthdays.length > 0) {
