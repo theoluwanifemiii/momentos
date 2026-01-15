@@ -1,4 +1,14 @@
-export const API_URL = "/https://momentos-production.up.railway.app/api";
+function normalizeApiBase(value?: string) {
+  if (!value) return '/api';
+  let base = value.trim();
+  base = base.replace(/\/+$/, '');
+  if (/^https?:\/[^/]/.test(base)) {
+    base = base.replace(/^https?:\/(?!\/)/, (match) => `${match}/`);
+  }
+  return base;
+}
+
+export const API_URL = normalizeApiBase(import.meta.env.VITE_API_URL);
 
 export const api = {
   async call(endpoint: string, options: RequestInit = {}) {
