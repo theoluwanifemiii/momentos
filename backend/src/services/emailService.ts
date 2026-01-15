@@ -1,6 +1,16 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+  if (resendClient) return resendClient;
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY is not configured');
+  }
+  resendClient = new Resend(apiKey);
+  return resendClient;
+}
 
 export interface EmailParams {
   to: string;
@@ -16,6 +26,7 @@ export interface EmailParams {
 export class EmailService {
   static async send(params: EmailParams): Promise<{ id: string; success: boolean }> {
     try {
+      const resend = getResendClient();
       const result = await resend.emails.send({
         from: `${params.from.name} <${params.from.email}>`,
         to: params.to,
