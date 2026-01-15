@@ -8,6 +8,8 @@
 // - Sends admin notifications 2 days before
 // - Logs all deliveries
 
+import 'dotenv/config';
+
 import { PrismaClient, TemplateType } from '@prisma/client';
 import cron from 'node-cron';
 import { Resend } from 'resend';
