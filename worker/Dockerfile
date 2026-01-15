@@ -7,10 +7,9 @@ RUN npm install
 
 COPY worker/tsconfig.json ./
 COPY worker/scheduler.ts ./
+COPY worker/prisma ./prisma
 
-COPY backend/prisma /app/backend/prisma
-
-RUN npx prisma generate --schema=/app/backend/prisma/schema.prisma
+RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
 CMD ["npm", "start"]

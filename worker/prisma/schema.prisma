@@ -1,0 +1,188 @@
+// Database Schema for MomentOS
+// File: backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Organization - the top-level tenant
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String   @default("UTC") // e.g. "Africa/Lagos", "America/Los_Angeles"
+  birthdaySendHour   Int      @default(9)
+  birthdaySendMinute Int      @default(0)
+  birthdayLastRunAt  DateTime?
+  
+  // Email configuration
+  emailFromName    String?
+  emailFromAddress String?
+  
+  // Relationships
+  users         User[]
+  people        Person[]
+  templates     Template[]
+  deliveryLogs  DeliveryLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("organizations")
+}
+
+// Admin users who manage the system
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  role           UserRole     @default(ADMIN)
+  emailVerifiedAt DateTime?
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  otps           Otp[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
+
+// One-time passcodes for verification and reset flows
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   OtpPurpose
+  codeHash  String
+  attempts  Int      @default(0)
+  maxAttempts Int    @default(5)
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@map("otps")
+}
+
+enum OtpPurpose {
+  REGISTER_VERIFY
+  PASSWORD_RESET
+}
+
+// People whose birthdays we're tracking
+model Person {
+  id        String   @id @default(cuid())
+  
+  // Core fields
+  fullName   String
+  firstName  String? // Optional - extracted or provided
+  email      String
+  birthday   DateTime // Stored as date only, time ignored
+  
+  // Optional fields
+  department String?
+  role       String?
+  
+  // System fields
+  optedOut   Boolean  @default(false)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  deliveryLogs DeliveryLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Email must be unique per organization
+  @@unique([organizationId, email])
+  @@map("people")
+}
+
+// Email templates
+model Template {
+  id      String       @id @default(cuid())
+  name    String
+  type    TemplateType
+  
+  // Template content
+  subject    String
+  content    String      @db.Text
+  imageUrl   String?     // For custom_image type
+  
+  // Flags
+  isDefault  Boolean     @default(false)
+  isActive   Boolean     @default(true)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  deliveryLogs DeliveryLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("templates")
+}
+
+enum TemplateType {
+  PLAIN_TEXT
+  HTML
+  CUSTOM_IMAGE
+}
+
+// Delivery tracking
+model DeliveryLog {
+  id        String        @id @default(cuid())
+  
+  // What was sent
+  personId    String
+  person      Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+  
+  templateId  String
+  template    Template    @relation(fields: [templateId], references: [id])
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Delivery details
+  status        DeliveryStatus @default(QUEUED)
+  scheduledFor  DateTime       // When it should be sent
+  sentAt        DateTime?      // When it was actually sent
+  deliveredAt   DateTime?      // When email was delivered
+  
+  // Error handling
+  errorMessage  String?        @db.Text
+  retryCount    Int            @default(0)
+  
+  // Tracking
+  externalId    String?        // Email provider's tracking ID
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("delivery_logs")
+}
+
+enum DeliveryStatus {
+  QUEUED          // Ready to send
+  SENDING         // Currently being sent
+  SENT            // Successfully sent to provider
+  DELIVERED       // Confirmed delivered by provider
+  FAILED          // Failed after retries
+  OPTED_OUT       // Person opted out
+}
