@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "resend": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.8",
