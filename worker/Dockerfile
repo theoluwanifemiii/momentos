@@ -2,12 +2,12 @@ FROM node:20-alpine
 
 WORKDIR /app/worker
 
-COPY worker/package*.json ./
+COPY package*.json ./
 RUN npm install
 
-COPY worker/tsconfig.json ./
-COPY worker/scheduler.ts ./
-COPY worker/prisma ./prisma
+COPY tsconfig.json ./
+COPY scheduler.ts ./
+COPY prisma ./prisma
 
 RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
