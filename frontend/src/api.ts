@@ -1,23 +1,10 @@
-function normalizeApiBase(value?: string) {
-  if (!value) return '/api';
-  let base = value.trim();
-  if (base.startsWith('/http')) {
-    base = base.slice(1);
-  }
-  base = base.replace(/\/+$/, '');
-  if (/^https?:\/[^/]/.test(base)) {
-    base = base.replace(/^https?:\/(?!\/)/, (match) => `${match}/`);
-  }
-  return base;
-}
-
-export const API_URL = normalizeApiBase(import.meta.env.VITE_API_URL);
+export const API_URL = "https://momentos-production.up.railway.app/api";
 
 export const api = {
   async call(endpoint: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     };
@@ -31,7 +18,7 @@ export const api = {
     const payload = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
-      const err = new Error(payload?.error || 'Request failed') as any;
+      const err = new Error(payload?.error || "Request failed") as any;
       err.status = response.status;
       err.data = payload;
       throw err;
