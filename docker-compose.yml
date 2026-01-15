@@ -49,8 +49,8 @@ services:
   # Worker (Scheduler)
   worker:
     build:
-      context: ./worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: momentos_worker
     restart: unless-stopped
     depends_on:
