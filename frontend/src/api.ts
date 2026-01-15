@@ -1,6 +1,9 @@
 function normalizeApiBase(value?: string) {
   if (!value) return '/api';
   let base = value.trim();
+  if (base.startsWith('/http')) {
+    base = base.slice(1);
+  }
   base = base.replace(/\/+$/, '');
   if (/^https?:\/[^/]/.test(base)) {
     base = base.replace(/^https?:\/(?!\/)/, (match) => `${match}/`);
