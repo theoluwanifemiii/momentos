@@ -1,4 +1,4 @@
-export const API_URL = '/api';
+export const API_URL = "/https://momentos-production.up.railway.app/api";
 
 export const api = {
   async call(endpoint: string, options: RequestInit = {}) {
