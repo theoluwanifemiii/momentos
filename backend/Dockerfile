@@ -2,10 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+COPY prisma ./prisma
 COPY package*.json ./
 RUN npm install
-
-COPY prisma ./prisma
 COPY tsconfig.json ./
 COPY src ./src
 
