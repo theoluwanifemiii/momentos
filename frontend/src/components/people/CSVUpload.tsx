@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { api, API_URL } from '../../api';
 
 // People: upload CSV for bulk creation.

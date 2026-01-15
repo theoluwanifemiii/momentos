@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../api';
 
 // People: show upcoming birthdays for the next 30 days.

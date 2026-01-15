@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import CSVUpload from './people/CSVUpload.tsx';
 import PeopleList from './people/PeopleList.tsx';
 import UpcomingBirthdays from './people/UpcomingBirthdays.tsx';
@@ -15,7 +15,7 @@ type DashboardProps = {
 };
 
 // Dashboard: tabbed navigation for people, templates, and uploads.
-export default function Dashboard({ user, onLogout, api }: DashboardProps) {
+export default function Dashboard({ onLogout, api }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'settings'>('dashboard');
 
   return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type ApiClient = {
   call: (endpoint: string, options?: RequestInit) => Promise<any>;
