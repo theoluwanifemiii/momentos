@@ -1,5 +1,10 @@
 const ENV_API_URL = import.meta.env.VITE_API_URL;
-const FALLBACK_API_URL = "/api";
+const DEFAULT_REMOTE_API_URL = "https://momentos-production.up.railway.app/api";
+const DEFAULT_LOCAL_API_URL = "http://localhost:3001/api";
+const FALLBACK_API_URL =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? DEFAULT_LOCAL_API_URL
+    : DEFAULT_REMOTE_API_URL;
 export const API_URL = ENV_API_URL || FALLBACK_API_URL;
 
 export const api = {

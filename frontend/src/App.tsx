@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { api } from './api';
-import Dashboard from './components/Dashboard.tsx';
-import LoginForm from './components/auth/LoginForm.tsx';
-import RegisterForm from './components/auth/RegisterForm.tsx';
-import VerifyForm from './components/auth/VerifyForm.tsx';
-import ForgotPasswordForm from './components/auth/ForgotPasswordForm.tsx';
-import ResetPasswordForm from './components/auth/ResetPasswordForm.tsx';
+
+const Dashboard = lazy(() => import('./components/Dashboard.tsx'));
+const LoginForm = lazy(() => import('./components/auth/LoginForm.tsx'));
+const RegisterForm = lazy(() => import('./components/auth/RegisterForm.tsx'));
+const VerifyForm = lazy(() => import('./components/auth/VerifyForm.tsx'));
+const ForgotPasswordForm = lazy(() => import('./components/auth/ForgotPasswordForm.tsx'));
+const ResetPasswordForm = lazy(() => import('./components/auth/ResetPasswordForm.tsx'));
 
 type View = 'login' | 'register' | 'verify' | 'forgot' | 'reset' | 'dashboard';
 
@@ -17,11 +18,8 @@ export default function MomentOSApp() {
   const [pendingEmail, setPendingEmail] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      setIsAuthenticated(true);
-      setView('dashboard');
-    }
+    setIsAuthenticated(false);
+    setView('login');
   }, []);
 
   const handleLogout = () => {
@@ -33,67 +31,73 @@ export default function MomentOSApp() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
-          {view === 'login' && (
-            <LoginForm
-              onSuccess={(data) => {
-                localStorage.setItem('token', data.token);
-                setUser(data.user);
-                setIsAuthenticated(true);
-                setView('dashboard');
-              }}
-              onRequireVerification={(email: string) => {
-                setPendingEmail(email);
-                setView('verify');
-              }}
-              onSwitchToRegister={() => setView('register')}
-              onForgotPassword={() => setView('forgot')}
-            />
-          )}
-          {view === 'register' && (
-            <RegisterForm
-              onSuccess={(data, email: string) => {
-                if (data.requiresVerification) {
+          <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+            {view === 'login' && (
+              <LoginForm
+                onSuccess={(data) => {
+                  localStorage.setItem('token', data.token);
+                  setUser(data.user);
+                  setIsAuthenticated(true);
+                  setView('dashboard');
+                }}
+                onRequireVerification={(email: string) => {
                   setPendingEmail(email);
                   setView('verify');
-                  return;
-                }
-                localStorage.setItem('token', data.token);
-                setUser(data.user);
-                setIsAuthenticated(true);
-                setView('dashboard');
-              }}
-              onSwitchToLogin={() => setView('login')}
-            />
-          )}
-          {view === 'verify' && (
-            <VerifyForm
-              email={pendingEmail}
-              onSuccess={() => setView('login')}
-              onBackToLogin={() => setView('login')}
-            />
-          )}
-          {view === 'forgot' && (
-            <ForgotPasswordForm
-              onSuccess={(email: string) => {
-                setPendingEmail(email);
-                setView('reset');
-              }}
-              onBackToLogin={() => setView('login')}
-            />
-          )}
-          {view === 'reset' && (
-            <ResetPasswordForm
-              email={pendingEmail}
-              onSuccess={() => setView('login')}
-              onBackToLogin={() => setView('login')}
-            />
-          )}
+                }}
+                onSwitchToRegister={() => setView('register')}
+                onForgotPassword={() => setView('forgot')}
+              />
+            )}
+            {view === 'register' && (
+              <RegisterForm
+                onSuccess={(data, email: string) => {
+                  if (data.requiresVerification) {
+                    setPendingEmail(email);
+                    setView('verify');
+                    return;
+                  }
+                  localStorage.setItem('token', data.token);
+                  setUser(data.user);
+                  setIsAuthenticated(true);
+                  setView('dashboard');
+                }}
+                onSwitchToLogin={() => setView('login')}
+              />
+            )}
+            {view === 'verify' && (
+              <VerifyForm
+                email={pendingEmail}
+                onSuccess={() => setView('login')}
+                onBackToLogin={() => setView('login')}
+              />
+            )}
+            {view === 'forgot' && (
+              <ForgotPasswordForm
+                onSuccess={(email: string) => {
+                  setPendingEmail(email);
+                  setView('reset');
+                }}
+                onBackToLogin={() => setView('login')}
+              />
+            )}
+            {view === 'reset' && (
+              <ResetPasswordForm
+                email={pendingEmail}
+                onSuccess={() => setView('login')}
+                onBackToLogin={() => setView('login')}
+              />
+            )}
+          </Suspense>
         </div>
-      </div>
+      </main>
     );
   }
 
-  return <Dashboard user={user} onLogout={handleLogout} api={api} />;
+  return (
+    <Suspense fallback={<div className="text-center py-8">Loading dashboard...</div>}>
+      <Dashboard user={user} onLogout={handleLogout} api={api} />
+    </Suspense>
+  );
 }

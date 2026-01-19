@@ -439,38 +439,6 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                       </p>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Editor</label>
-                    <div className="flex items-center gap-3 text-sm">
-                      <button
-                        type="button"
-                        onClick={() => setEditorMode('plain')}
-                        className={`px-3 py-2 rounded border ${
-                          editorMode === 'plain'
-                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Plain Text
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditorMode('code')}
-                        className={`px-3 py-2 rounded border ${
-                          editorMode === 'code'
-                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Code
-                      </button>
-                    </div>
-                    {form.type === 'HTML' && editorMode === 'plain' && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Plain text will be formatted into HTML automatically.
-                      </p>
-                    )}
-                  </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Subject</label>
                     <input

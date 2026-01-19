@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import CSVUpload from './people/CSVUpload.tsx';
-import PeopleList from './people/PeopleList.tsx';
-import UpcomingBirthdays from './people/UpcomingBirthdays.tsx';
-import Templates from './Templates.tsx';
-import Settings from './Settings.tsx';
-import AdminDashboard from './admin/AdminDashboard.tsx';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { OnboardingState } from '../types/onboarding';
+
+const CSVUpload = lazy(() => import('./people/CSVUpload.tsx'));
+const PeopleList = lazy(() => import('./people/PeopleList.tsx'));
+const UpcomingBirthdays = lazy(() => import('./people/UpcomingBirthdays.tsx'));
+const Templates = lazy(() => import('./Templates.tsx'));
+const Settings = lazy(() => import('./Settings.tsx'));
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard.tsx'));
 
 type DashboardProps = {
   user: any;
@@ -56,9 +57,13 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
     }
   };
 
+  const renderFallback = (label: string) => (
+    <div className="text-center py-8 text-sm text-gray-500">Loading {label}...</div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
+      <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold">MomentOS</h1>
           <button
@@ -68,9 +73,9 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
             Sign out
           </button>
         </div>
-      </nav>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex gap-2 sm:gap-4 mb-6 border-b overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -137,54 +142,68 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
         </div>
 
         {activeTab === 'dashboard' && (
-          <AdminDashboard
-            onSelectTab={(tab) => setActiveTab(tab)}
-            onboarding={onboarding}
-            onRefreshOnboarding={refreshOnboarding}
-            onStartGuided={() => {
-              setGuidedMode(true);
-              const nextStep = onboarding?.steps.find((step) => step.status === 'active');
-              if (nextStep) {
-                setActiveTab(nextStep.route);
-              } else {
-                setActiveTab('people');
-              }
-            }}
-          />
+          <Suspense fallback={renderFallback('dashboard')}>
+            <AdminDashboard
+              onSelectTab={(tab) => setActiveTab(tab)}
+              onboarding={onboarding}
+              onRefreshOnboarding={refreshOnboarding}
+              onStartGuided={() => {
+                setGuidedMode(true);
+                const nextStep = onboarding?.steps.find((step) => step.status === 'active');
+                if (nextStep) {
+                  setActiveTab(nextStep.route);
+                } else {
+                  setActiveTab('people');
+                }
+              }}
+            />
+          </Suspense>
         )}
         {activeTab === 'upload' && (
-          <CSVUpload
-            onboarding={onboarding}
-            onOnboardingUpdate={handleOnboardingUpdate}
-            onSelectTab={(tab) => setActiveTab(tab)}
-          />
+          <Suspense fallback={renderFallback('upload tools')}>
+            <CSVUpload
+              onboarding={onboarding}
+              onOnboardingUpdate={handleOnboardingUpdate}
+              onSelectTab={(tab) => setActiveTab(tab)}
+            />
+          </Suspense>
         )}
         {activeTab === 'people' && (
-          <PeopleList
-            allowManualSend={hasFirstSend || hasTestSend}
-            onboarding={onboarding}
-            onOnboardingUpdate={handleOnboardingUpdate}
-            onSelectTab={(tab) => setActiveTab(tab)}
-          />
+          <Suspense fallback={renderFallback('people')}>
+            <PeopleList
+              allowManualSend={hasFirstSend || hasTestSend}
+              onboarding={onboarding}
+              onOnboardingUpdate={handleOnboardingUpdate}
+              onSelectTab={(tab) => setActiveTab(tab)}
+            />
+          </Suspense>
         )}
-        {activeTab === 'upcoming' && <UpcomingBirthdays />}
+        {activeTab === 'upcoming' && (
+          <Suspense fallback={renderFallback('upcoming birthdays')}>
+            <UpcomingBirthdays />
+          </Suspense>
+        )}
         {activeTab === 'templates' && (
-          <Templates
-            api={api}
-            onboarding={onboarding}
-            onOnboardingUpdate={handleOnboardingUpdate}
-            onSelectTab={(tab) => setActiveTab(tab)}
-          />
+          <Suspense fallback={renderFallback('templates')}>
+            <Templates
+              api={api}
+              onboarding={onboarding}
+              onOnboardingUpdate={handleOnboardingUpdate}
+              onSelectTab={(tab) => setActiveTab(tab)}
+            />
+          </Suspense>
         )}
         {activeTab === 'settings' && (
-          <Settings
-            api={api}
-            onboarding={onboarding}
-            onOnboardingUpdate={handleOnboardingUpdate}
-            onSelectTab={(tab) => setActiveTab(tab)}
-          />
+          <Suspense fallback={renderFallback('settings')}>
+            <Settings
+              api={api}
+              onboarding={onboarding}
+              onOnboardingUpdate={handleOnboardingUpdate}
+              onSelectTab={(tab) => setActiveTab(tab)}
+            />
+          </Suspense>
         )}
-      </div>
+      </main>
     </div>
   );
 }
