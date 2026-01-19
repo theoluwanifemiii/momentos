@@ -29,6 +29,7 @@ model Organization {
   people        Person[]
   templates     Template[]
   deliveryLogs  DeliveryLog[]
+  onboarding    OnboardingProgress?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -81,6 +82,22 @@ model Otp {
 enum OtpPurpose {
   REGISTER_VERIFY
   PASSWORD_RESET
+}
+
+// Per-organization onboarding progress
+model OnboardingProgress {
+  id        String   @id @default(cuid())
+  organizationId String @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  completedSteps String[]
+  testEmailSentAt DateTime?
+  automationActivatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("onboarding_progress")
 }
 
 // People whose birthdays we're tracking

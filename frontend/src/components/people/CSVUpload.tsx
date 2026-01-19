@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { api, API_URL } from '../../api';
+import { OnboardingState } from '../../types/onboarding';
+import NextStepPanel from '../onboarding/NextStepPanel';
+import OnboardingBanner from '../onboarding/OnboardingBanner';
 
 // People: upload CSV for bulk creation.
-export default function CSVUpload() {
+type CSVUploadProps = {
+  onboarding: OnboardingState | null;
+  onOnboardingUpdate: (next: OnboardingState) => void;
+  onSelectTab?: (tab: 'people' | 'templates' | 'settings' | 'upcoming' | 'dashboard') => void;
+};
+
+export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab }: CSVUploadProps) {
   const [csvContent, setCsvContent] = useState('');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -31,6 +41,19 @@ export default function CSVUpload() {
       });
       setResult(data);
       setCsvContent('');
+      if (data.onboarding) {
+        onOnboardingUpdate(data.onboarding);
+        if (data.summary?.validRows > 0) {
+          const nextStep =
+            data.onboarding.steps?.find((step: any) => step.id === data.onboarding.currentStepId) ||
+            data.onboarding.steps?.find((step: any) => step.status === 'active');
+          if (nextStep) {
+            setSuccessMessage(`✅ People uploaded successfully. Next: ${nextStep.title}.`);
+          } else {
+            setSuccessMessage('✅ People uploaded successfully.');
+          }
+        }
+      }
     } catch (err: any) {
       setResult({ error: err.message });
     } finally {
@@ -56,6 +79,17 @@ export default function CSVUpload() {
       </div>
 
       <div className="space-y-4">
+        {successMessage && (
+          <OnboardingBanner
+            title="Upload complete"
+            message={successMessage}
+            onDismiss={() => setSuccessMessage('')}
+          />
+        )}
+        <NextStepPanel
+          onboarding={onboarding}
+          onSelectTab={onSelectTab}
+        />
         <div>
           <label className="block text-sm font-medium mb-2">Select CSV File</label>
           <input

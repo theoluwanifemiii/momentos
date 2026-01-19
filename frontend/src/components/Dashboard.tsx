@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import CSVUpload from './people/CSVUpload.tsx';
 import PeopleList from './people/PeopleList.tsx';
 import UpcomingBirthdays from './people/UpcomingBirthdays.tsx';
 import Templates from './Templates.tsx';
 import Settings from './Settings.tsx';
 import AdminDashboard from './admin/AdminDashboard.tsx';
+import { OnboardingState } from '../types/onboarding';
 
 type DashboardProps = {
   user: any;
@@ -17,6 +18,43 @@ type DashboardProps = {
 // Dashboard: tabbed navigation for people, templates, and uploads.
 export default function Dashboard({ onLogout, api }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'settings'>('dashboard');
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
+  const [guidedMode, setGuidedMode] = useState(false);
+
+  const refreshOnboarding = async () => {
+    try {
+      const data = await api.call('/onboarding/status');
+      setOnboarding(data.onboarding || data);
+    } catch (err) {
+      console.error('Onboarding fetch failed', err);
+    }
+  };
+
+  useEffect(() => {
+    refreshOnboarding();
+  }, []);
+
+  const hasFirstSend = onboarding?.hasFirstSend ?? false;
+  const hasTestSend = onboarding?.completedSteps?.includes('send_test_email') ?? false;
+
+  useEffect(() => {
+    if (!hasFirstSend && activeTab === 'upcoming') {
+      setActiveTab('dashboard');
+    }
+  }, [hasFirstSend, activeTab]);
+
+  const handleOnboardingUpdate = (next: OnboardingState) => {
+    setOnboarding(next);
+    if (next.progress.completed >= next.progress.total) {
+      setGuidedMode(false);
+    }
+    if (guidedMode && next.progress.completed < next.progress.total && next.currentStepId) {
+      const activeStep = next.steps.find((step) => step.id === next.currentStepId);
+      if (activeStep) {
+        setActiveTab(activeStep.route);
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -64,16 +102,18 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
           >
             All People
           </button>
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={`pb-2 px-4 ${
-              activeTab === 'upcoming'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Upcoming Birthdays
-          </button>
+          {hasFirstSend && (
+            <button
+              onClick={() => setActiveTab('upcoming')}
+              className={`pb-2 px-4 ${
+                activeTab === 'upcoming'
+                  ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Upcoming Birthdays
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('templates')}
             className={`pb-2 px-4 ${
@@ -97,13 +137,53 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
         </div>
 
         {activeTab === 'dashboard' && (
-          <AdminDashboard onSelectTab={(tab) => setActiveTab(tab)} />
+          <AdminDashboard
+            onSelectTab={(tab) => setActiveTab(tab)}
+            onboarding={onboarding}
+            onRefreshOnboarding={refreshOnboarding}
+            onStartGuided={() => {
+              setGuidedMode(true);
+              const nextStep = onboarding?.steps.find((step) => step.status === 'active');
+              if (nextStep) {
+                setActiveTab(nextStep.route);
+              } else {
+                setActiveTab('people');
+              }
+            }}
+          />
         )}
-        {activeTab === 'upload' && <CSVUpload />}
-        {activeTab === 'people' && <PeopleList />}
+        {activeTab === 'upload' && (
+          <CSVUpload
+            onboarding={onboarding}
+            onOnboardingUpdate={handleOnboardingUpdate}
+            onSelectTab={(tab) => setActiveTab(tab)}
+          />
+        )}
+        {activeTab === 'people' && (
+          <PeopleList
+            allowManualSend={hasFirstSend || hasTestSend}
+            onboarding={onboarding}
+            onOnboardingUpdate={handleOnboardingUpdate}
+            onSelectTab={(tab) => setActiveTab(tab)}
+          />
+        )}
         {activeTab === 'upcoming' && <UpcomingBirthdays />}
-        {activeTab === 'templates' && <Templates api={api} />}
-        {activeTab === 'settings' && <Settings api={api} />}
+        {activeTab === 'templates' && (
+          <Templates
+            api={api}
+            onboarding={onboarding}
+            onOnboardingUpdate={handleOnboardingUpdate}
+            onSelectTab={(tab) => setActiveTab(tab)}
+          />
+        )}
+        {activeTab === 'settings' && (
+          <Settings
+            api={api}
+            onboarding={onboarding}
+            onOnboardingUpdate={handleOnboardingUpdate}
+            onSelectTab={(tab) => setActiveTab(tab)}
+          />
+        )}
       </div>
     </div>
   );

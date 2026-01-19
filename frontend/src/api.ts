@@ -1,4 +1,6 @@
-export const API_URL = "https://momentos-production.up.railway.app/api";
+const ENV_API_URL = import.meta.env.VITE_API_URL;
+const FALLBACK_API_URL = "/api";
+export const API_URL = ENV_API_URL || FALLBACK_API_URL;
 
 export const api = {
   async call(endpoint: string, options: RequestInit = {}) {

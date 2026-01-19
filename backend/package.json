@@ -5,7 +5,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma && tsc",
     "start": "node dist/index.js",
-    "postinstall": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma"
+    "postinstall": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma",
+    "test": "node --test --loader tsx"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",

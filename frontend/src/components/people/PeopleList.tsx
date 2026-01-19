@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { OnboardingState } from '../../types/onboarding';
+import NextStepPanel from '../onboarding/NextStepPanel';
+import OnboardingBanner from '../onboarding/OnboardingBanner';
 
 // People: list records, manual add, and send birthday email now.
-export default function PeopleList() {
+type PeopleListProps = {
+  allowManualSend?: boolean;
+  onboarding: OnboardingState | null;
+  onOnboardingUpdate: (next: OnboardingState) => void;
+  onSelectTab?: (tab: 'people' | 'templates' | 'settings' | 'upcoming' | 'dashboard') => void;
+};
+
+export default function PeopleList({
+  allowManualSend = false,
+  onboarding,
+  onOnboardingUpdate,
+  onSelectTab,
+}: PeopleListProps) {
   const [people, setPeople] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -19,6 +34,7 @@ export default function PeopleList() {
     role: '',
   });
   const [formError, setFormError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     loadPeople();
@@ -59,7 +75,7 @@ export default function PeopleList() {
     }
 
     try {
-      await api.call('/people', {
+      const data = await api.call('/people', {
         method: 'POST',
         body: JSON.stringify({
           firstName: form.firstName || undefined,
@@ -70,6 +86,17 @@ export default function PeopleList() {
           role: form.role || undefined,
         }),
       });
+      if (data.onboarding) {
+        onOnboardingUpdate(data.onboarding);
+        const nextStep =
+          data.onboarding.steps?.find((step: any) => step.id === data.onboarding.currentStepId) ||
+          data.onboarding.steps?.find((step: any) => step.status === 'active');
+        if (nextStep) {
+          setSuccessMessage(`✅ Person added successfully. Next: ${nextStep.title}.`);
+        } else {
+          setSuccessMessage('✅ Person added successfully.');
+        }
+      }
       setForm({
         firstName: '',
         lastName: '',
@@ -176,157 +203,176 @@ export default function PeopleList() {
 
   if (people.length === 0) {
     return (
-      <div className="bg-white p-8 rounded-lg shadow text-center">
-        <p className="text-gray-600">No people added yet. Upload a CSV or add one manually.</p>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-        >
-          Add Person
-        </button>
-        {showAddModal && (
-          <div className="fixed inset-0 z-50">
-            <div
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setShowAddModal(false)}
-            />
-            <div className="absolute inset-0 flex items-center justify-center p-4">
-              <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
-                <div className="flex items-center justify-between px-6 py-4 border-b">
-                  <h3 className="text-lg font-bold">Add Person</h3>
-                  <button
-                    onClick={() => setShowAddModal(false)}
-                    className="text-sm text-gray-600 hover:text-gray-900"
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">First Name</label>
-                      <input
-                        value={form.firstName}
-                        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="First name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Last Name</label>
-                      <input
-                        value={form.lastName}
-                        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Last name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Email</label>
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="person@example.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Birthday</label>
-                      <input
-                        type="date"
-                        value={form.birthday}
-                        onChange={(e) => setForm({ ...form, birthday: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Department</label>
-                      <input
-                        value={form.department}
-                        onChange={(e) => setForm({ ...form, department: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Department"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Role</label>
-                      <input
-                        value={form.role}
-                        onChange={(e) => setForm({ ...form, role: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Role"
-                      />
-                    </div>
-                  </div>
-
-                  {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
-
-                  <div className="mt-4 flex justify-end gap-3">
+      <div className="space-y-4">
+        {successMessage && (
+          <OnboardingBanner
+            title="Success"
+            message={successMessage}
+            onDismiss={() => setSuccessMessage('')}
+          />
+        )}
+        <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
+        <div className="bg-white p-8 rounded-lg shadow text-center">
+          <p className="text-gray-600">No people added yet. Upload a CSV or add one manually.</p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+          >
+            Add Person
+          </button>
+          {showAddModal && (
+            <div className="fixed inset-0 z-50">
+              <div
+                className="absolute inset-0 bg-black/40"
+                onClick={() => setShowAddModal(false)}
+              />
+              <div className="absolute inset-0 flex items-center justify-center p-4">
+                <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
+                  <div className="flex items-center justify-between px-6 py-4 border-b">
+                    <h3 className="text-lg font-bold">Add Person</h3>
                     <button
                       onClick={() => setShowAddModal(false)}
-                      className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                      className="text-sm text-gray-600 hover:text-gray-900"
                     >
-                      Cancel
+                      Close
                     </button>
-                    <button
-                      onClick={handleAddPerson}
-                      className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-                    >
-                      Add Person
-                    </button>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">First Name</label>
+                        <input
+                          value={form.firstName}
+                          onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="First name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Last Name</label>
+                        <input
+                          value={form.lastName}
+                          onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Last name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={form.email}
+                          onChange={(e) => setForm({ ...form, email: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="person@example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Birthday</label>
+                        <input
+                          type="date"
+                          value={form.birthday}
+                          onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Department</label>
+                        <input
+                          value={form.department}
+                          onChange={(e) => setForm({ ...form, department: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Department"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Role</label>
+                        <input
+                          value={form.role}
+                          onChange={(e) => setForm({ ...form, role: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Role"
+                        />
+                      </div>
+                    </div>
+
+                    {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
+
+                    <div className="mt-4 flex justify-end gap-3">
+                      <button
+                        onClick={() => setShowAddModal(false)}
+                        className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddPerson}
+                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                      >
+                        Add Person
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <div className="px-6 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm text-gray-700">{sendMessage}</div>
-        <div className="flex flex-wrap items-center gap-3">
-          {selectedIds.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="text-gray-600">{selectedIds.length} selected</span>
-              <button
-                onClick={() => handleBulkOptOut(true)}
-                className="text-blue-600 hover:underline"
-              >
-                Bulk opt-out
-              </button>
-              <button
-                onClick={() => handleBulkOptOut(false)}
-                className="text-blue-600 hover:underline"
-              >
-                Bulk opt-in
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                className="text-red-600 hover:underline"
-              >
-                Delete selected
-              </button>
-            </div>
-          )}
-          <button
-            onClick={handleExport}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Export CSV
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-          >
-            Add Person
-          </button>
+    <div className="space-y-4">
+      {successMessage && (
+        <OnboardingBanner
+          title="Success"
+          message={successMessage}
+          onDismiss={() => setSuccessMessage('')}
+        />
+      )}
+      <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-gray-700">{sendMessage}</div>
+          <div className="flex flex-wrap items-center gap-3">
+            {selectedIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="text-gray-600">{selectedIds.length} selected</span>
+                <button
+                  onClick={() => handleBulkOptOut(true)}
+                  className="text-blue-600 hover:underline"
+                >
+                  Bulk opt-out
+                </button>
+                <button
+                  onClick={() => handleBulkOptOut(false)}
+                  className="text-blue-600 hover:underline"
+                >
+                  Bulk opt-in
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="text-red-600 hover:underline"
+                >
+                  Delete selected
+                </button>
+              </div>
+            )}
+            <button
+              onClick={handleExport}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+            >
+              Add Person
+            </button>
+          </div>
         </div>
-      </div>
       <div className="overflow-x-auto">
         <table className="min-w-[900px] w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -364,13 +410,17 @@ export default function PeopleList() {
                   {person.department || '—'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <button
-                    onClick={() => handleSendBirthday(person.id)}
-                    disabled={sendingId === person.id}
-                    className="text-blue-600 hover:underline disabled:opacity-50"
-                  >
-                    {sendingId === person.id ? 'Sending...' : 'Send Birthday Email Now'}
-                  </button>
+                  {allowManualSend ? (
+                    <button
+                      onClick={() => handleSendBirthday(person.id)}
+                      disabled={sendingId === person.id}
+                      className="text-blue-600 hover:underline disabled:opacity-50"
+                    >
+                      {sendingId === person.id ? 'Sending...' : 'Send Birthday Email Now'}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-400">Unlock after first send</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -474,6 +524,7 @@ export default function PeopleList() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,10 @@ import {
   otpTemplate,
   welcomeTemplate,
 } from "./services/internalEmailTemplates";
+import {
+  computeOnboardingState,
+  markOnboardingStep,
+} from "./services/onboarding";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -29,7 +33,8 @@ app.use(morgan("dev"));
 
 // JWT Secret (required via env)
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
-const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL;
+const DEFAULT_FROM_EMAIL =
+  process.env.DEFAULT_FROM_EMAIL || "birthday@mail.olusworks.xyz";
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 
 if (!JWT_SECRET) {
@@ -545,10 +550,16 @@ app.post(
         }
       }
 
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
       res.json({
         success: true,
         summary: validation.summary,
         errors: validation.errors,
+        onboarding,
       });
     } catch (err: any) {
       console.error("CSV upload error:", err);
@@ -727,7 +738,12 @@ app.post(
         },
       });
 
-      res.json({ person });
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
+      res.json({ person, onboarding });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -930,7 +946,12 @@ app.get(
         where: { id: req.organizationId! },
       });
 
-      res.json({ organization: org });
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
+      res.json({ organization: org, onboarding });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1037,7 +1058,12 @@ app.post(
         },
       });
 
-      res.json({ template });
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
+      res.json({ template, onboarding });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1107,7 +1133,12 @@ app.put(
         }
       }
 
-      res.json({ template });
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
+      res.json({ template, onboarding });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1291,10 +1322,17 @@ app.post(
         },
       });
 
+      const onboarding = await markOnboardingStep(
+        prisma,
+        req.organizationId!,
+        "send_test_email"
+      );
+
       res.json({
         success: true,
         message: `Test email sent to ${user?.email}`,
         emailId: result.id,
+        onboarding,
       });
     } catch (err: any) {
       console.error("Test send error:", err);
@@ -1421,7 +1459,11 @@ From everyone at {{organization_name}}`,
       );
 
       if (toCreate.length === 0) {
-        return res.json({ message: "Default templates already exist" });
+        const onboarding = await computeOnboardingState(
+          prisma,
+          req.organizationId!
+        );
+        return res.json({ message: "Default templates already exist", onboarding });
       }
 
       const created = await Promise.all(
@@ -1435,11 +1477,75 @@ From everyone at {{organization_name}}`,
         )
       );
 
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+
       res.json({
         success: true,
         message: "Default templates created",
         count: created.length,
+        onboarding,
       });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ============================================================================
+// ONBOARDING ROUTES
+// ============================================================================
+
+app.get(
+  "/api/onboarding/status",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+      res.json({ onboarding });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  "/api/onboarding/mark-step",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        stepId: z.string().min(1),
+      });
+
+      const { stepId } = schema.parse(req.body);
+      const onboarding = await markOnboardingStep(
+        prisma,
+        req.organizationId!,
+        stepId
+      );
+      res.json({ onboarding });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  "/api/onboarding/recompute",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const onboarding = await computeOnboardingState(
+        prisma,
+        req.organizationId!
+      );
+      res.json({ onboarding });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1513,6 +1619,17 @@ app.get(
         },
       });
 
+      const totalSuccessful = await prisma.deliveryLog.count({
+        where: {
+          organizationId: orgId,
+          status: { in: ["SENT", "DELIVERED"] },
+        },
+      });
+
+      const totalDeliveries = await prisma.deliveryLog.count({
+        where: { organizationId: orgId },
+      });
+
       // Get upcoming birthdays (next 7 days)
       const people = await prisma.person.findMany({
         where: {
@@ -1552,6 +1669,8 @@ app.get(
           totalTemplates: templateCount,
           activeTemplates: activeTemplateCount,
           upcomingBirthdays,
+          totalDeliveries,
+          totalSuccessfulDeliveries: totalSuccessful,
           todayDeliveries: {
             total: todayDeliveries,
             successful: todaySuccessful,
