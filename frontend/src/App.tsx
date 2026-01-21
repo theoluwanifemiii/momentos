@@ -1,4 +1,6 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api } from './api';
 
 const LandingPage = lazy(() => import('./components/LandingPage.tsx'));
@@ -9,148 +11,158 @@ const VerifyForm = lazy(() => import('./components/auth/VerifyForm.tsx'));
 const ForgotPasswordForm = lazy(() => import('./components/auth/ForgotPasswordForm.tsx'));
 const ResetPasswordForm = lazy(() => import('./components/auth/ResetPasswordForm.tsx'));
 
-type View = 'landing' | 'login' | 'register' | 'verify' | 'forgot' | 'reset' | 'dashboard';
-
-const routeMap: Record<View, string> = {
-  landing: '/',
-  login: '/login',
-  register: '/register',
-  verify: '/verify',
-  forgot: '/forgot',
-  reset: '/reset',
-  dashboard: '/app',
-};
-
-const viewForPath = (path: string): View => {
-  if (path.startsWith('/login')) return 'login';
-  if (path.startsWith('/register')) return 'register';
-  if (path.startsWith('/verify')) return 'verify';
-  if (path.startsWith('/forgot')) return 'forgot';
-  if (path.startsWith('/reset')) return 'reset';
-  if (path.startsWith('/app')) return 'dashboard';
-  return 'landing';
-};
-
 // App shell: auth flow switcher and dashboard entry point.
 export default function MomentOSApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [view, setView] = useState<View>('login');
   const [user, setUser] = useState<any>(null);
   const [pendingEmail, setPendingEmail] = useState('');
-
-  const navigateTo = useCallback((nextView: View) => {
-    const nextPath = routeMap[nextView];
-    if (window.location.pathname !== nextPath) {
-      window.history.pushState({}, '', nextPath);
-    }
-    setView(nextView);
-  }, []);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setIsAuthenticated(false);
-    setView(viewForPath(window.location.pathname));
-  }, []);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setView(viewForPath(window.location.pathname));
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
     setUser(null);
-    navigateTo('login');
+    navigate('/login', { replace: true });
   };
 
-  if (!isAuthenticated) {
-    if (view === 'dashboard') {
-      navigateTo('login');
-      return null;
-    }
-
-    if (view === 'landing') {
-      return (
+  const AuthLayout = ({ children }: { children: ReactNode }) => (
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
         <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-          <LandingPage
-            onLogin={() => navigateTo('login')}
-            onRegister={() => navigateTo('register')}
-          />
+          {children}
         </Suspense>
-      );
-    }
-
-    return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-            {view === 'login' && (
-              <LoginForm
-                onSuccess={(data) => {
-                  localStorage.setItem('token', data.token);
-                  setUser(data.user);
-                  setIsAuthenticated(true);
-                  navigateTo('dashboard');
-                }}
-                onRequireVerification={(email: string) => {
-                  setPendingEmail(email);
-                  navigateTo('verify');
-                }}
-                onSwitchToRegister={() => navigateTo('register')}
-                onForgotPassword={() => navigateTo('forgot')}
-              />
-            )}
-            {view === 'register' && (
-              <RegisterForm
-                onSuccess={(data, email: string) => {
-                  if (data.requiresVerification) {
-                    setPendingEmail(email);
-                    navigateTo('verify');
-                    return;
-                  }
-                  localStorage.setItem('token', data.token);
-                  setUser(data.user);
-                  setIsAuthenticated(true);
-                  navigateTo('dashboard');
-                }}
-                onSwitchToLogin={() => navigateTo('login')}
-              />
-            )}
-            {view === 'verify' && (
-              <VerifyForm
-                email={pendingEmail}
-                onSuccess={() => navigateTo('login')}
-                onBackToLogin={() => navigateTo('login')}
-              />
-            )}
-            {view === 'forgot' && (
-              <ForgotPasswordForm
-                onSuccess={(email: string) => {
-                  setPendingEmail(email);
-                  navigateTo('reset');
-                }}
-                onBackToLogin={() => navigateTo('login')}
-              />
-            )}
-            {view === 'reset' && (
-              <ResetPasswordForm
-                email={pendingEmail}
-                onSuccess={() => navigateTo('login')}
-                onBackToLogin={() => navigateTo('login')}
-              />
-            )}
-          </Suspense>
-        </div>
-      </main>
-    );
-  }
+      </div>
+    </main>
+  );
 
   return (
-    <Suspense fallback={<div className="text-center py-8">Loading dashboard...</div>}>
-      <Dashboard user={user} onLogout={handleLogout} api={api} />
+    <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingPage
+              onLogin={() => navigate('/login')}
+              onRegister={() => navigate('/register')}
+            />
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AuthLayout>
+                <LoginForm
+                  onSuccess={(data) => {
+                    localStorage.setItem('token', data.token);
+                    setUser(data.user);
+                    setIsAuthenticated(true);
+                    navigate('/app');
+                  }}
+                  onRequireVerification={(email: string) => {
+                    setPendingEmail(email);
+                    navigate('/verify');
+                  }}
+                  onSwitchToRegister={() => navigate('/register')}
+                  onForgotPassword={() => navigate('/forgot')}
+                />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AuthLayout>
+                <RegisterForm
+                  onSuccess={(data, email: string) => {
+                    if (data.requiresVerification) {
+                      setPendingEmail(email);
+                      navigate('/verify');
+                      return;
+                    }
+                    localStorage.setItem('token', data.token);
+                    setUser(data.user);
+                    setIsAuthenticated(true);
+                    navigate('/app');
+                  }}
+                  onSwitchToLogin={() => navigate('/login')}
+                />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/verify"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AuthLayout>
+                <VerifyForm
+                  email={pendingEmail}
+                  onSuccess={() => navigate('/login')}
+                  onBackToLogin={() => navigate('/login')}
+                />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/forgot"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AuthLayout>
+                <ForgotPasswordForm
+                  onSuccess={(email: string) => {
+                    setPendingEmail(email);
+                    navigate('/reset');
+                  }}
+                  onBackToLogin={() => navigate('/login')}
+                />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/reset"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AuthLayout>
+                <ResetPasswordForm
+                  email={pendingEmail}
+                  onSuccess={() => navigate('/login')}
+                  onBackToLogin={() => navigate('/login')}
+                />
+              </AuthLayout>
+            )
+          }
+        />
+        <Route
+          path="/app"
+          element={
+            isAuthenticated ? (
+              <Dashboard user={user} onLogout={handleLogout} api={api} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </Suspense>
   );
 }
