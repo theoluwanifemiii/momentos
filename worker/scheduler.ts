@@ -91,7 +91,7 @@ class BirthdayScheduler {
     const bday = DateTime.fromJSDate(birthday, { zone: orgNow.zone });
 
     // Handle Feb 29 in non-leap years
-    if (bday.getMonth() === 1 && bday.getDate() === 29) {
+    if (bday.month === 2 && bday.day === 29) {
       const isLeapYear = (year: number) =>
         (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 
