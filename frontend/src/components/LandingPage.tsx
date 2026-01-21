@@ -47,13 +47,17 @@ const landingMarkup = `
       <form id="waitlist-form" class="mt-6 grid gap-4">
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
-            <label class="text-sm font-medium text-slate-700">Full name</label>
-            <input name="fullName" type="text" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="Jordan Lee">
+            <label class="text-sm font-medium text-slate-700">First name</label>
+            <input name="firstName" type="text" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="Jordan">
           </div>
           <div>
-            <label class="text-sm font-medium text-slate-700">Work email</label>
-            <input name="email" type="email" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="you@company.com">
+            <label class="text-sm font-medium text-slate-700">Last name</label>
+            <input name="lastName" type="text" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="Lee">
           </div>
+        </div>
+        <div>
+          <label class="text-sm font-medium text-slate-700">Work email</label>
+          <input name="email" type="email" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="you@company.com">
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
@@ -1056,7 +1060,8 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       }
       const formData = new FormData(waitlistForm);
       const payload = {
-        fullName: String(formData.get('fullName') || ''),
+        firstName: String(formData.get('firstName') || ''),
+        lastName: String(formData.get('lastName') || ''),
         email: String(formData.get('email') || ''),
         organization: String(formData.get('organization') || ''),
         role: String(formData.get('role') || ''),

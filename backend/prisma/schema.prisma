@@ -209,7 +209,8 @@ model SchedulerRun {
 
 model WaitlistEntry {
   id           String   @id @default(cuid())
-  fullName     String
+  firstName    String
+  lastName     String
   email        String   @unique
   organization String
   role         String?

@@ -450,8 +450,10 @@ app.post("/api/auth/verify", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Sender email not configured" });
     }
 
+    const recipientName = user.email.split("@")[0];
     const { subject, html, text } = welcomeTemplate({
       organizationName: org?.name || "MomentOS",
+      recipientName,
     });
 
     await EmailService.send({
@@ -544,7 +546,8 @@ app.post("/api/auth/password/reset", async (req: Request, res: Response) => {
 app.post("/api/waitlist", async (req: Request, res: Response) => {
   try {
     const schema = z.object({
-      fullName: z.string().min(1),
+      firstName: z.string().min(1),
+      lastName: z.string().min(1),
       email: z.string().email(),
       organization: z.string().min(1),
       role: z.string().optional(),
@@ -556,7 +559,8 @@ app.post("/api/waitlist", async (req: Request, res: Response) => {
 
     await prisma.waitlistEntry.create({
       data: {
-        fullName: data.fullName.trim(),
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
         email: data.email.toLowerCase(),
         organization: data.organization.trim(),
         role: data.role?.trim() || null,
@@ -565,7 +569,9 @@ app.post("/api/waitlist", async (req: Request, res: Response) => {
       },
     });
 
-    const { subject, text, html } = waitlistWelcomeTemplate();
+    const { subject, text, html } = waitlistWelcomeTemplate({
+      recipientName: data.firstName,
+    });
     await EmailService.send({
       to: data.email.toLowerCase(),
       subject,

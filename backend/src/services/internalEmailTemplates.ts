@@ -4,6 +4,19 @@ type TemplatePayload = {
   text: string;
 };
 
+const firstNameFromInput = (value?: string) => {
+  if (!value) {
+    return "there";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "there";
+  }
+  const normalized = trimmed.replace(/[^a-zA-Z]+/g, " ").trim();
+  const first = normalized.split(/\s+/).filter(Boolean)[0];
+  return first || "there";
+};
+
 export function otpTemplate(params: { code: string; ttlMinutes: number; purpose: 'VERIFY' | 'RESET' }): TemplatePayload {
   const subject =
     params.purpose === 'VERIFY'
@@ -26,10 +39,14 @@ export function otpTemplate(params: { code: string; ttlMinutes: number; purpose:
   return { subject, html, text };
 }
 
-export function welcomeTemplate(params: { organizationName: string }): TemplatePayload {
+export function welcomeTemplate(params: {
+  organizationName: string;
+  recipientName?: string;
+}): TemplatePayload {
+  const name = firstNameFromInput(params.recipientName);
   const subject = 'Welcome to MomentOS 👋';
   const previewText = 'Thanks for being here. We’re glad you found us.';
-  const text = `Hi there,
+  const text = `Hi ${name},
 
 Welcome to MomentOS — we’re really glad you’re here.
 
@@ -62,7 +79,7 @@ Founder, MomentOS 💛`;
       <h1 style="margin: 12px 0 0; font-size: 26px; font-weight: 600;">Welcome to MomentOS</h1>
     </div>
     <div style="padding: 28px 32px; color: #0f172a;">
-      <p style="margin: 0 0 12px; font-size: 16px;">Hi there,</p>
+      <p style="margin: 0 0 12px; font-size: 16px;">Hi ${name},</p>
       <p style="margin: 0 0 16px; font-size: 17px;">Welcome to MomentOS — we’re really glad you’re here.</p>
       <p style="margin: 0 0 16px; color: #475569;">
         MomentOS was built around a simple belief: people matter, and the systems we use should respect that. Birthdays shouldn’t be forgotten. Messages shouldn’t feel rushed or awkward. And caring shouldn’t require extra work.
@@ -95,10 +112,11 @@ Founder, MomentOS 💛`;
   return { subject, html, text };
 }
 
-export function waitlistWelcomeTemplate(): TemplatePayload {
+export function waitlistWelcomeTemplate(params?: { recipientName?: string }): TemplatePayload {
+  const name = firstNameFromInput(params?.recipientName);
   const subject = 'You’re on the list 🎉';
   const previewText = 'Thanks for joining the waitlist. We’ll be in touch.';
-  const text = `Hey — I’m Olu, the person building MomentOS.
+  const text = `Hey ${name} — I’m Olu, the person building MomentOS.
 
 MomentOS started from a very simple problem: people care, but systems fail. Birthdays get forgotten not because teams don’t value people, but because the tools we use aren’t built for moments like this.
 
@@ -129,7 +147,7 @@ Founder, MomentOS 💛`;
       <h1 style="margin: 12px 0 0; font-size: 26px; font-weight: 600;">Welcome to MomentOS</h1>
     </div>
     <div style="padding: 28px 32px; color: #0f172a;">
-      <p style="margin: 0 0 12px; font-size: 16px;">Hey — I’m Olu, the person building MomentOS.</p>
+      <p style="margin: 0 0 12px; font-size: 16px;">Hey ${name} — I’m Olu, the person building MomentOS.</p>
       <p style="margin: 0 0 16px; color: #475569;">
         MomentOS started from a very simple problem: people care, but systems fail. Birthdays get forgotten not because teams don’t value people, but because the tools we use aren’t built for moments like this.
       </p>
