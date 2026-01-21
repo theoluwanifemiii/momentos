@@ -11,6 +11,7 @@
 import 'dotenv/config';
 
 import { PrismaClient, TemplateType } from '@prisma/client';
+import { DateTime } from 'luxon';
 import cron from 'node-cron';
 import { Resend } from 'resend';
 
@@ -76,43 +77,50 @@ class BirthdayScheduler {
   /**
    * Check if today is someone's birthday
    */
+  private getOrgNow(timezone: string) {
+    const zone = timezone || 'UTC';
+    const orgNow = DateTime.now().setZone(zone);
+    if (!orgNow.isValid) {
+      return DateTime.now().setZone('UTC');
+    }
+    return orgNow;
+  }
+
   private isBirthdayToday(birthday: Date, timezone: string): boolean {
-    const now = new Date();
-    const bday = new Date(birthday);
+    const orgNow = this.getOrgNow(timezone);
+    const bday = DateTime.fromJSDate(birthday, { zone: orgNow.zone });
 
     // Handle Feb 29 in non-leap years
     if (bday.getMonth() === 1 && bday.getDate() === 29) {
       const isLeapYear = (year: number) =>
         (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 
-      if (!isLeapYear(now.getFullYear())) {
+      if (!isLeapYear(orgNow.year)) {
         // Celebrate on Feb 28 in non-leap years
-        return now.getMonth() === 1 && now.getDate() === 28;
+        return orgNow.month === 2 && orgNow.day === 28;
       }
     }
 
-    return now.getMonth() === bday.getMonth() && now.getDate() === bday.getDate();
+    return orgNow.month === bday.month && orgNow.day === bday.day;
   }
 
   /**
    * Get upcoming birthdays (for admin notifications)
    */
-  private getUpcomingBirthdays(daysAhead: number): (birthday: Date) => boolean {
+  private getUpcomingBirthdays(
+    daysAhead: number,
+    timezone: string
+  ): (birthday: Date) => boolean {
     return (birthday: Date) => {
-      const now = new Date();
-      const futureDate = new Date();
-      futureDate.setDate(now.getDate() + daysAhead);
+      const orgNow = this.getOrgNow(timezone);
+      const futureDate = orgNow.plus({ days: daysAhead });
 
-      const bday = new Date(birthday);
-      const thisYearBirthday = new Date(
-        now.getFullYear(),
-        bday.getMonth(),
-        bday.getDate()
-      );
+      const bday = DateTime.fromJSDate(birthday, { zone: orgNow.zone });
+      const thisYearBirthday = bday.set({ year: orgNow.year });
 
       return (
-        thisYearBirthday.getMonth() === futureDate.getMonth() &&
-        thisYearBirthday.getDate() === futureDate.getDate()
+        thisYearBirthday.month === futureDate.month &&
+        thisYearBirthday.day === futureDate.day
       );
     };
   }
@@ -137,6 +145,39 @@ class BirthdayScheduler {
     });
 
     if (!org) return;
+
+    const orgNow = this.getOrgNow(org.timezone || 'UTC');
+    const runDate = orgNow.toISODate();
+    if (!runDate) {
+      console.error(`Invalid run date for organization ${org.id}`);
+      return;
+    }
+    try {
+      const alreadyRan = await prisma.schedulerRun.findUnique({
+        where: {
+          organizationId_runDate: {
+            organizationId: org.id,
+            runDate,
+          },
+        },
+      });
+
+      if (alreadyRan) {
+        console.log(`Skipping ${org.id} - already processed for ${runDate}`);
+        return;
+      }
+
+      await prisma.schedulerRun.create({
+        data: {
+          organizationId: org.id,
+          runDate,
+        },
+      });
+    } catch (error: any) {
+      console.error(`Scheduler run check failed for ${org.id}:`, error.message);
+      return;
+    }
+
     const templates = await this.ensureTemplates(org);
 
     // Find today's birthdays
@@ -159,7 +200,7 @@ class BirthdayScheduler {
 
     // Check for upcoming birthdays (2 days ahead for admin notification)
     const upcomingBirthdays = org.people.filter((person: any) =>
-      this.getUpcomingBirthdays(2)(person.birthday)
+      this.getUpcomingBirthdays(2, org.timezone)(person.birthday)
     );
 
     if (upcomingBirthdays.length > 0) {
@@ -411,33 +452,6 @@ From everyone at {{organization_name}}`,
     return result;
   }
 
-  private getLocalParts(timeZone: string) {
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-
-    const parts = formatter.formatToParts(new Date());
-    const lookup: Record<string, string> = {};
-    parts.forEach((part) => {
-      lookup[part.type] = part.value;
-    });
-
-    return {
-      year: Number(lookup.year),
-      month: Number(lookup.month),
-      day: Number(lookup.day),
-      hour: Number(lookup.hour),
-      minute: Number(lookup.minute),
-      dateKey: `${lookup.year}-${lookup.month}-${lookup.day}`,
-    };
-  }
-
   private shouldRunForOrg(org: {
     timezone: string;
     birthdaySendHour: number;
@@ -445,8 +459,7 @@ From everyone at {{organization_name}}`,
     birthdayLastRunAt: Date | null;
   }) {
     // Run only when org-local time hits configured hour/minute.
-    const tz = org.timezone || 'UTC';
-    const local = this.getLocalParts(tz);
+    const local = this.getOrgNow(org.timezone || 'UTC');
 
     if (local.hour !== org.birthdaySendHour || local.minute !== org.birthdaySendMinute) {
       return false;
@@ -456,14 +469,11 @@ From everyone at {{organization_name}}`,
       return true;
     }
 
-    const lastLocal = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(org.birthdayLastRunAt);
+    const lastLocal = DateTime.fromJSDate(org.birthdayLastRunAt, {
+      zone: local.zone,
+    }).toISODate();
 
-    return lastLocal !== local.dateKey;
+    return lastLocal !== local.toISODate();
   }
 
   /**

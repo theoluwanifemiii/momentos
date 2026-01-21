@@ -1,0 +1,740 @@
+{
+  "info": {
+    "name": "MomentOS API",
+    "description": "Complete API collection for MomentOS birthday automation system",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"organizationName\": \"Test Organization\",\n  \"timezone\": \"UTC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.token) {",
+                  "        pm.collectionVariables.set('token', response.token);",
+                  "        pm.environment.set('token', response.token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Send Verification OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify", "send"]
+            }
+          }
+        },
+        {
+          "name": "Verify Account OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify"]
+            }
+          }
+        },
+        {
+          "name": "Send Password Reset OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/password/forgot",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "password", "forgot"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\",\n  \"password\": \"newpassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/password/reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "password", "reset"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "People",
+      "item": [
+        {
+          "name": "Upload CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"csvContent\": \"full_name,email,birthday,first_name,department,role\\nJane Doe,jane.doe@example.com,1990-05-23,Jane,Engineering,Software Engineer\\nJohn Smith,john.smith@example.com,1985-12-15,John,Marketing,Marketing Manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "upload"]
+            }
+          }
+        },
+        {
+          "name": "List All People",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people",
+              "host": ["{{baseUrl}}"],
+              "path": ["people"]
+            }
+          }
+        },
+        {
+          "name": "Get Upcoming Birthdays",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/upcoming",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "upcoming"]
+            }
+          }
+        },
+        {
+          "name": "Download Sample CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/sample-csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "sample-csv"]
+            }
+          }
+        },
+        {
+          "name": "Create Person",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"birthday\": \"1990-05-23\",\n  \"department\": \"Engineering\",\n  \"role\": \"Software Engineer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people",
+              "host": ["{{baseUrl}}"],
+              "path": ["people"]
+            }
+          }
+        },
+        {
+          "name": "Update Person",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Jane Updated Doe\",\n  \"department\": \"Product\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "PERSON_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Person",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "PERSON_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bulk Delete",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"id1\", \"id2\", \"id3\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people/bulk-delete",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "bulk-delete"]
+            }
+          }
+        },
+        {
+          "name": "Bulk Opt-Out",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"id1\", \"id2\", \"id3\"],\n  \"optedOut\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people/bulk-opt-out",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "bulk-opt-out"]
+            }
+          }
+        },
+        {
+          "name": "Send Birthday Email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/:id/send-birthday",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", ":id", "send-birthday"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "PERSON_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export People CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", "export"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings"]
+            }
+          }
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Organization Name\",\n  \"timezone\": \"America/New_York\",\n  \"emailFromName\": \"Birthday Team\",\n  \"emailFromAddress\": \"birthdays@example.com\",\n  \"birthdaySendHour\": 9,\n  \"birthdaySendMinute\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "List Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates"]
+            }
+          }
+        },
+        {
+          "name": "Get Single Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "TEMPLATE_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Birthday Template\",\n  \"type\": \"HTML\",\n  \"subject\": \"Happy Birthday {{first_name}}!\",\n  \"content\": \"<html><body><h1>Happy Birthday {{first_name}}!</h1><p>From {{organization_name}}</p></body></html>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates"]
+            }
+          }
+        },
+        {
+          "name": "Update Template",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "TEMPLATE_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "TEMPLATE_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Preview Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates/:id/preview",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", ":id", "preview"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "TEMPLATE_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Test Send Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates/:id/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", ":id", "test"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "TEMPLATE_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Default Templates",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/templates/create-defaults",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", "create-defaults"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Onboarding",
+      "item": [
+        {
+          "name": "Get Onboarding Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/onboarding/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["onboarding", "status"]
+            }
+          }
+        },
+        {
+          "name": "Mark Onboarding Step",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stepId\": \"send_test_email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/onboarding/mark-step",
+              "host": ["{{baseUrl}}"],
+              "path": ["onboarding", "mark-step"]
+            }
+          }
+        },
+        {
+          "name": "Recompute Onboarding",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/onboarding/recompute",
+              "host": ["{{baseUrl}}"],
+              "path": ["onboarding", "recompute"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Dashboard",
+      "item": [
+        {
+          "name": "Get Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "overview"]
+            }
+          }
+        },
+        {
+          "name": "Get Delivery Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/delivery-logs?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "delivery-logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "status",
+                  "value": "SENT",
+                  "disabled": true
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2024-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2024-12-31",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Delivery Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/delivery-logs/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "delivery-logs", "export"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SENT",
+                  "disabled": true
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2024-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2024-12-31",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Delivery Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/delivery-stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "delivery-stats"],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": "2024-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2024-12-31",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Retry Failed Delivery",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/delivery-logs/:id/retry",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "delivery-logs", ":id", "retry"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "LOG_ID_HERE"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

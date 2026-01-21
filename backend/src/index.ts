@@ -6,21 +6,29 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import { PrismaClient, OtpPurpose } from "@prisma/client";
+import { PrismaClient, OtpPurpose, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { DateTime } from "luxon";
 import { z, ZodError } from "zod";
 import { randomInt } from "crypto";
 import { CSVValidator } from "./services/csvValidator";
 import { EmailService } from "./services/emailService";
 import {
   otpTemplate,
+  waitlistWelcomeTemplate,
   welcomeTemplate,
 } from "./services/internalEmailTemplates";
 import {
   computeOnboardingState,
   markOnboardingStep,
 } from "./services/onboarding";
+import {
+  PersonUpdateSchema,
+  SettingsUpdateSchema,
+  TemplateUpdateSchema,
+  validateUpdate,
+} from "./middleware/validation";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -57,6 +65,26 @@ function interpolateTemplate(
     result = result.replace(new RegExp(`{{${key}}}`, "g"), value);
   }
   return result;
+}
+
+function getOrgDateTime(timezone?: string) {
+  const zone = timezone || "UTC";
+  const orgNow = DateTime.now().setZone(zone);
+  if (!orgNow.isValid) {
+    return DateTime.now().setZone("UTC");
+  }
+  return orgNow;
+}
+
+function getNextBirthdayOccurrence(birthday: Date, reference: DateTime) {
+  const base = DateTime.fromJSDate(birthday, { zone: reference.zone });
+  let next = base.set({ year: reference.year });
+
+  if (next < reference.startOf("day")) {
+    next = next.plus({ years: 1 });
+  }
+
+  return next;
 }
 
 // Sends an OTP email and stores a hashed record with expiry/attempt limits.
@@ -186,10 +214,10 @@ async function authenticate(
 
 // Register new organization + admin user
 app.post("/api/auth/register", async (req: Request, res: Response) => {
-  try {
-    // Debug: log what we're receiving
-    console.log("Register request body:", JSON.stringify(req.body, null, 2));
+  const requestId = req.headers["x-request-id"]?.toString();
+  let safeEmail: string | undefined;
 
+  try {
     const schema = z.object({
       email: z.string().email(),
       password: z.string().min(8),
@@ -213,6 +241,8 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       }
       throw err;
     }
+
+    safeEmail = data.email;
 
     // Check if user exists
     const existing = await prisma.user.findUnique({
@@ -256,6 +286,13 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       },
     });
 
+    console.log("Register outcome:", {
+      email: safeEmail,
+      organizationId: org.id,
+      requestId,
+      outcome: "success",
+    });
+
     res.json({
       user: {
         id: user.id,
@@ -271,7 +308,12 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       message: "Verification code sent to your email.",
     });
   } catch (err: any) {
-    console.error("Register error:", err);
+    console.error("Register outcome:", {
+      email: safeEmail,
+      organizationId: undefined,
+      requestId,
+      outcome: "failed",
+    });
     res.status(400).json({ error: err.message || "Registration failed" });
   }
 });
@@ -498,6 +540,54 @@ app.post("/api/auth/password/reset", async (req: Request, res: Response) => {
   }
 });
 
+// Waitlist signup (public)
+app.post("/api/waitlist", async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      fullName: z.string().min(1),
+      email: z.string().email(),
+      organization: z.string().min(1),
+      role: z.string().optional(),
+      teamSize: z.string().optional(),
+      country: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+
+    await prisma.waitlistEntry.create({
+      data: {
+        fullName: data.fullName.trim(),
+        email: data.email.toLowerCase(),
+        organization: data.organization.trim(),
+        role: data.role?.trim() || null,
+        teamSize: data.teamSize?.trim() || null,
+        country: data.country?.trim() || null,
+      },
+    });
+
+    const { subject, text, html } = waitlistWelcomeTemplate();
+    await EmailService.send({
+      to: data.email.toLowerCase(),
+      subject,
+      text,
+      html,
+      from: {
+        name: DEFAULT_FROM_NAME || "MomentOS",
+        email: DEFAULT_FROM_EMAIL,
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2002") {
+        return res.status(409).json({ error: "Email already on waitlist" });
+      }
+    }
+    res.status(400).json({ error: err.message || "Waitlist signup failed" });
+  }
+});
+
 // ============================================================================
 // PEOPLE ROUTES
 // ============================================================================
@@ -652,36 +742,28 @@ app.get(
         },
       });
 
-      const today = new Date();
-      const in30Days = new Date();
-      in30Days.setDate(today.getDate() + 30);
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+        select: { timezone: true },
+      });
+
+      const orgNow = getOrgDateTime(org?.timezone);
+      const today = orgNow.startOf("day");
+      const windowEnd = today.plus({ days: 30 }).endOf("day");
 
       // Filter by upcoming birthdays (check month/day only)
       const upcoming = people
         .filter((person) => {
-          const bday = new Date(person.birthday);
-          const thisYearBirthday = new Date(
-            today.getFullYear(),
-            bday.getMonth(),
-            bday.getDate()
+          const nextOccurrence = getNextBirthdayOccurrence(
+            person.birthday,
+            today
           );
-
-          return thisYearBirthday >= today && thisYearBirthday <= in30Days;
+          return nextOccurrence <= windowEnd;
         })
         .sort((a, b) => {
-          const aBday = new Date(a.birthday);
-          const bBday = new Date(b.birthday);
-          const aThisYear = new Date(
-            today.getFullYear(),
-            aBday.getMonth(),
-            aBday.getDate()
-          );
-          const bThisYear = new Date(
-            today.getFullYear(),
-            bBday.getMonth(),
-            bBday.getDate()
-          );
-          return aThisYear.getTime() - bThisYear.getTime();
+          const aNext = getNextBirthdayOccurrence(a.birthday, today);
+          const bNext = getNextBirthdayOccurrence(b.birthday, today);
+          return aNext.toMillis() - bNext.toMillis();
         });
 
       res.json({ upcoming });
@@ -758,17 +840,22 @@ app.put(
     try {
       const { id } = req.params;
 
+      let safeData = validateUpdate(PersonUpdateSchema, req.body);
+      if ("email" in safeData && safeData.email) {
+        safeData = { ...safeData, email: safeData.email.toLowerCase() };
+      }
+
       const person = await prisma.person.update({
         where: {
           id,
           organizationId: req.organizationId!,
         },
-        data: req.body,
+        data: safeData,
       });
 
       res.json({ person });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   }
 );
@@ -963,14 +1050,16 @@ app.put(
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
+      const safeData = validateUpdate(SettingsUpdateSchema, req.body);
+
       const org = await prisma.organization.update({
         where: { id: req.organizationId! },
-        data: req.body,
+        data: safeData,
       });
 
       res.json({ organization: org });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(400).json({ error: err.message });
     }
   }
 );
@@ -1078,10 +1167,10 @@ app.put(
     try {
       const { id } = req.params;
 
-      const data = req.body;
+      const safeData = validateUpdate(TemplateUpdateSchema, req.body);
 
       let template;
-      if (data?.isDefault === true) {
+      if (safeData?.isDefault === true) {
         const [updated] = await prisma.$transaction([
           prisma.template.update({
             where: {
@@ -1089,7 +1178,7 @@ app.put(
               organizationId: req.organizationId!,
             },
             data: {
-              ...data,
+              ...safeData,
               isDefault: true,
               isActive: true,
             },
@@ -1110,10 +1199,10 @@ app.put(
             id,
             organizationId: req.organizationId!,
           },
-          data,
+          data: safeData,
         });
 
-        if (data?.isDefault === false && template.isDefault === false) {
+        if (safeData?.isDefault === false && template.isDefault === false) {
           const existingDefault = await prisma.template.findFirst({
             where: {
               organizationId: req.organizationId!,
@@ -1994,18 +2083,23 @@ app.get(
         },
       });
 
-      const now = new Date();
-      const in7Days = new Date();
-      in7Days.setDate(now.getDate() + 7);
+      const orgNow = getOrgDateTime(
+        (
+          await prisma.organization.findUnique({
+            where: { id: orgId },
+            select: { timezone: true },
+          })
+        )?.timezone
+      );
+      const orgToday = orgNow.startOf("day");
+      const windowEnd = orgToday.plus({ days: 7 }).endOf("day");
 
       const upcomingBirthdays = people.filter((person) => {
-        const bday = new Date(person.birthday);
-        const thisYearBirthday = new Date(
-          now.getFullYear(),
-          bday.getMonth(),
-          bday.getDate()
+        const nextOccurrence = getNextBirthdayOccurrence(
+          person.birthday,
+          orgToday
         );
-        return thisYearBirthday >= now && thisYearBirthday <= in7Days;
+        return nextOccurrence <= windowEnd;
       }).length;
 
       // Get recent activity (last 10 deliveries)
