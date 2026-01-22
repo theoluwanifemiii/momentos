@@ -42,7 +42,7 @@ app.use(morgan("dev"));
 // JWT Secret (required via env)
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
 const DEFAULT_FROM_EMAIL =
-  process.env.DEFAULT_FROM_EMAIL || "birthday@mail.olusworks.xyz";
+  process.env.DEFAULT_FROM_EMAIL || "notifications@usemomentos.xyz";
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 
 if (!JWT_SECRET) {

@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { API_URL } from '../api';
 
 type LandingPageProps = {
@@ -443,217 +445,7 @@ const landingMarkup = `
     </div>
   </section>
 
-  <section class="bg-slate-50/50 border-slate-100 border-t pt-24 pb-24" id="how-it-works">
-    <div class="max-w-7xl mx-auto px-6">
-      <div class="text-center mb-16">
-        <span class="text-indigo-600 font-semibold uppercase text-xs tracking-wider">Platform</span>
-        <h2 class="sm:text-4xl text-3xl font-semibold text-slate-900 tracking-tight mt-2">Everything you need to automate joy</h2>
-      </div>
-
-      <div class="grid md:grid-cols-2 gap-6">
-        <div class="group bg-white rounded-3xl p-2 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
-          <div class="bg-gradient-to-br from-slate-50 to-indigo-50/40 rounded-2xl h-64 overflow-hidden relative flex items-center justify-center">
-            <div class="absolute inset-x-12 top-10 bottom-0 bg-white rounded-t-xl border border-slate-200 shadow-lg flex flex-col p-5 space-y-4">
-              <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div class="h-2 w-20 bg-slate-100 rounded-full"></div>
-                <div class="h-2 w-8 bg-slate-100 rounded-full"></div>
-              </div>
-              <div class="space-y-3">
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold">JD</div>
-                  <div class="flex-1 space-y-1.5">
-                    <div class="h-2 w-24 bg-slate-200 rounded-full"></div>
-                    <div class="h-1.5 w-16 bg-slate-100 rounded-full"></div>
-                  </div>
-                  <div class="w-12 h-5 rounded-full bg-green-50 border border-green-100"></div>
-                </div>
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-semibold">AS</div>
-                  <div class="flex-1 space-y-1.5">
-                    <div class="h-2 w-20 bg-slate-200 rounded-full"></div>
-                    <div class="h-1.5 w-14 bg-slate-100 rounded-full"></div>
-                  </div>
-                  <div class="w-12 h-5 rounded-full bg-green-50 border border-green-100"></div>
-                </div>
-                <div class="flex items-center gap-3 opacity-60">
-                  <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold">MR</div>
-                  <div class="flex-1 space-y-1.5">
-                    <div class="h-2 w-28 bg-slate-200 rounded-full"></div>
-                    <div class="h-1.5 w-12 bg-slate-100 rounded-full"></div>
-                  </div>
-                  <div class="w-12 h-5 rounded-full bg-slate-50 border border-slate-100"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Centralized People Data</h3>
-            <p class="text-slate-500 leading-relaxed">Import from CSV, connect your HRIS, or add manually. We keep everything organized and validate dates automatically.</p>
-          </div>
-        </div>
-
-        <div class="group bg-white rounded-3xl p-2 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
-          <div class="bg-gradient-to-br from-slate-50 to-purple-50/40 rounded-2xl h-64 overflow-hidden relative flex items-center justify-center">
-            <div class="absolute inset-0 flex items-center justify-center">
-              <div class="w-80 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-500">
-                <div class="bg-slate-50 border-b border-slate-100 p-3 flex gap-1.5">
-                  <div class="w-2.5 h-2.5 rounded-full bg-slate-200"></div>
-                  <div class="w-2.5 h-2.5 rounded-full bg-slate-200"></div>
-                  <div class="w-2.5 h-2.5 rounded-full bg-slate-200"></div>
-                </div>
-                <div class="p-5 space-y-4">
-                  <div class="space-y-2">
-                    <div class="h-2 w-10 bg-slate-200 rounded-full"></div>
-                    <div class="h-9 w-full bg-slate-50 rounded-lg border border-slate-100 flex items-center px-3 text-xs text-slate-400 shadow-sm">
-                      Happy Birthday, <span class="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded mx-1.5 font-medium">{name}</span>!
-                    </div>
-                  </div>
-                  <div class="space-y-2">
-                    <div class="h-2 w-16 bg-slate-200 rounded-full"></div>
-                    <div class="h-20 w-full bg-slate-50 rounded-lg border border-slate-100 p-3 shadow-sm">
-                      <div class="h-2 w-full bg-slate-200 rounded-full mb-2.5"></div>
-                      <div class="h-2 w-5/6 bg-slate-200 rounded-full mb-2.5"></div>
-                      <div class="h-2 w-4/6 bg-slate-200 rounded-full"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Smart Templates</h3>
-            <p class="text-slate-500 leading-relaxed">Create dynamic templates with variables. Our editor makes sure every message feels personal and on-brand.</p>
-          </div>
-        </div>
-
-        <div class="group bg-white rounded-3xl p-2 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
-          <div class="bg-gradient-to-br from-slate-50 to-blue-50/40 rounded-2xl h-64 overflow-hidden relative flex items-center justify-center">
-            <div class="relative w-full px-16">
-              <div class="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-200 -translate-y-1/2"></div>
-              <div class="relative flex justify-between items-center z-10">
-                <div class="flex flex-col items-center gap-3">
-                  <div class="w-10 h-10 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center text-slate-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                      <line x1="16" x2="16" y1="2" y2="6"></line>
-                      <line x1="8" x2="8" y1="2" y2="6"></line>
-                      <line x1="3" x2="21" y1="10" y2="10"></line>
-                    </svg>
-                  </div>
-                  <div class="bg-white px-2.5 py-1 rounded-full border border-slate-200 shadow-sm text-[10px] font-semibold uppercase tracking-wide text-slate-500">Day 0</div>
-                </div>
-                <div class="flex flex-col items-center gap-3">
-                  <div class="w-12 h-12 bg-indigo-600 shadow-indigo-200 shadow-lg rounded-full flex items-center justify-center text-white transform scale-110">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                  </div>
-                  <div class="bg-slate-900 px-3 py-1 rounded-full shadow-lg text-xs font-medium text-white">9:00 AM</div>
-                </div>
-                <div class="flex flex-col items-center gap-3">
-                  <div class="w-10 h-10 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center text-green-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M20 6 9 17l-5-5"></path>
-                    </svg>
-                  </div>
-                  <div class="bg-white px-2.5 py-1 rounded-full border border-slate-200 shadow-sm text-[10px] font-semibold uppercase tracking-wide text-slate-500">Sent</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Precision Scheduling</h3>
-            <p class="text-slate-500 leading-relaxed">We automatically calculate the perfect send time based on your organization's timezone settings.</p>
-          </div>
-        </div>
-
-        <div class="group bg-white rounded-3xl p-2 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
-          <div class="bg-gradient-to-br from-slate-50 to-orange-50/40 rounded-2xl h-64 overflow-hidden relative flex items-center justify-center">
-            <div class="flex flex-col items-center gap-6 transform translate-y-3">
-              <div class="relative z-10">
-                <div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-lg flex items-center justify-center ring-4 ring-slate-50">
-                  <div class="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>
-                    </svg>
-                  </div>
-                </div>
-                <div class="absolute top-full left-1/2 w-px h-6 bg-slate-300 -translate-x-1/2 -z-10"></div>
-                <div class="absolute top-[24px] left-1/2 w-[120px] h-px bg-slate-300 -translate-x-1/2 translate-y-6 -z-10"></div>
-                <div class="absolute top-[24px] left-[calc(50%-60px)] w-px h-6 bg-slate-300 translate-y-6 -z-10"></div>
-                <div class="absolute top-[24px] right-[calc(50%-60px)] w-px h-6 bg-slate-300 translate-y-6 -z-10"></div>
-              </div>
-              <div class="flex gap-8">
-                <div class="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
-                  <div class="flex text-sm font-semibold text-indigo-600 bg-indigo-50 w-full h-full items-center justify-center">SM</div>
-                </div>
-                <div class="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
-                  <div class="w-full h-full bg-green-50 flex items-center justify-center text-green-600 font-semibold text-sm">DL</div>
-                </div>
-                <div class="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
-                  <div class="w-full h-full bg-orange-50 flex items-center justify-center text-orange-600 font-semibold text-sm">RK</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Team Management</h3>
-            <p class="text-slate-500 leading-relaxed">Manage admins, view permissions, and organize people into groups for department-specific messaging.</p>
-          </div>
-        </div>
-
-        <div class="group bg-white rounded-3xl p-2 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 md:col-span-2 flex flex-col lg:flex-row overflow-hidden">
-          <div class="flex-1 p-8 md:p-12 flex flex-col justify-center">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 border border-green-100 text-green-700 text-xs font-semibold mb-6 w-fit">
-              <span class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              99.9% Deliverability
-            </div>
-            <h3 class="text-2xl font-semibold text-slate-900 mb-3">Enterprise Reliability</h3>
-            <p class="text-slate-500 leading-relaxed text-lg mb-8 max-w-lg">
-              Our infrastructure is built to ensure your emails land in the inbox, not the spam folder. We monitor reputation constantly so you don't have to.
-            </p>
-            <div class="flex gap-8">
-              <div class="flex flex-col">
-                <span class="text-3xl font-semibold text-slate-900 tracking-tight">10k+</span>
-                <span class="text-sm text-slate-500 font-medium mt-1">Messages Sent</span>
-              </div>
-              <div class="w-px h-12 bg-slate-200"></div>
-              <div class="flex flex-col">
-                <span class="text-3xl font-semibold text-slate-900 tracking-tight">0%</span>
-                <span class="text-sm text-slate-500 font-medium mt-1">Downtime</span>
-              </div>
-            </div>
-          </div>
-          <div class="flex-1 bg-gradient-to-br from-slate-50 to-white relative min-h-[300px] flex items-center justify-center p-8 lg:border-l border-slate-100">
-            <div class="relative w-full max-w-sm">
-              <div class="absolute top-6 left-8 right-0 h-24 bg-white rounded-xl shadow-sm border border-slate-200 opacity-40 transform scale-95"></div>
-              <div class="absolute top-3 left-4 right-4 h-24 bg-white rounded-xl shadow-md border border-slate-200 opacity-70 transform scale-98"></div>
-              <div class="relative bg-white rounded-xl shadow-xl border border-slate-200 p-5 flex items-center gap-5 transform transition-transform group-hover:scale-105 duration-500">
-                <div class="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"></path>
-                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-                    <path d="m16 19 2 2 4-4"></path>
-                  </svg>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex justify-between items-start mb-1.5">
-                    <span class="font-semibold text-slate-900 text-sm">Delivery Confirmed</span>
-                    <span class="text-[10px] text-slate-400 font-medium bg-slate-50 px-1.5 py-0.5 rounded">Now</span>
-                  </div>
-                  <div class="text-sm text-slate-500 truncate">Successfully sent birthday wish to <span class="text-slate-700 font-medium">Alex Morgan</span>.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+  <div id="how-it-works-motion"></div>
 
   <section class="bg-slate-50 pt-24 pb-24" id="features">
     <div class="max-w-7xl mr-auto ml-auto pr-6 pl-6">
@@ -1240,8 +1032,207 @@ const landingMarkup = `
   </footer>
 `;
 
+type CardProps = {
+  title: string;
+  desc: string;
+  tag: string;
+  tagClass: string;
+};
+
+function useParallax() {
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+
+  const sx = useSpring(mx, { stiffness: 160, damping: 18, mass: 0.2 });
+  const sy = useSpring(my, { stiffness: 160, damping: 18, mass: 0.2 });
+
+  const px = useTransform(sx, (v) => v * 16);
+  const py = useTransform(sy, (v) => v * 14);
+
+  return { mx, my, px, py };
+}
+
+function FeatureCard({ title, desc, tag, tagClass }: CardProps) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [inside, setInside] = useState(false);
+  const { mx, my, px, py } = useParallax();
+
+  function onMove(e: MouseEvent) {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    const nx = (e.clientX - r.left) / r.width - 0.5;
+    const ny = (e.clientY - r.top) / r.height - 0.5;
+    mx.set(nx);
+    my.set(ny);
+  }
+
+  function onLeave() {
+    setInside(false);
+    mx.set(0);
+    my.set(0);
+  }
+
+  return (
+    <motion.article
+      ref={(node) => {
+        ref.current = node;
+      }}
+      onMouseEnter={() => setInside(true)}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_12px_30px_rgba(2,6,23,0.06)]"
+    >
+      <motion.div
+        className="pointer-events-none absolute -inset-24 opacity-70"
+        style={{
+          translateX: useTransform(px, (v) => v * 2.2),
+          translateY: useTransform(py, (v) => v * 2.2),
+          background:
+            "radial-gradient(circle, rgba(99,102,241,0.18), transparent 55%)",
+        }}
+      />
+
+      <div className="relative">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <span className={`feature-tag ${tagClass}`}>{tag}</span>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p>
+
+        <div className="relative mt-5 overflow-hidden rounded-xl bg-slate-50 ring-1 ring-slate-100">
+          <motion.div
+            className="absolute left-4 top-4 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100"
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+            style={{
+              x: useTransform(px, (v) => v * 0.6),
+              y: useTransform(py, (v) => v * 0.4),
+            }}
+          >
+            Auto send
+          </motion.div>
+
+          <motion.div
+            className="absolute right-4 bottom-4 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100"
+            animate={{ y: [0, 5, 0] }}
+            transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{
+              x: useTransform(px, (v) => v * 0.5),
+              y: useTransform(py, (v) => v * 0.6),
+            }}
+          >
+            {"{name}"}
+          </motion.div>
+
+          <div className="h-44 w-full" />
+          <motion.div
+            className="pointer-events-none absolute left-0 top-0 h-full w-[40%] opacity-30"
+            animate={{ x: ["-40%", "140%"] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+            style={{
+              background:
+                "linear-gradient(90deg, transparent, rgba(99,102,241,0.35), transparent)",
+            }}
+          />
+
+          <motion.div
+            className="absolute left-10 top-16 h-4 w-[2px] rounded-full bg-slate-900/60"
+            animate={{ opacity: [1, 0.2, 1], x: [0, 10, 0] }}
+            transition={{
+              opacity: { duration: 1.1, repeat: Infinity, ease: "easeInOut" },
+              x: { duration: 3.8, repeat: Infinity, ease: "easeInOut" },
+            }}
+          />
+
+          <motion.div
+            className="pointer-events-none absolute inset-0"
+            animate={inside ? { opacity: 1 } : { opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div
+              className="absolute left-6 bottom-6 rounded-full bg-indigo-500/20 px-3 py-2 text-xs font-medium text-indigo-700"
+              initial={false}
+              animate={inside ? { x: 10, y: -10 } : { x: 0, y: 0 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18 }}
+            >
+              Focus mode
+            </motion.div>
+            <motion.div
+              className="absolute right-6 top-6 rounded-full bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-700"
+              initial={false}
+              animate={inside ? { x: -12, y: 10 } : { x: 0, y: 0 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18 }}
+            >
+              Verified
+            </motion.div>
+          </motion.div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-20" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
+          </span>
+          <span>Always on, never noisy</span>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+function FeatureGridAlive() {
+  return (
+    <section
+      className="bg-slate-50/50 border-slate-100 border-t pt-24 pb-24"
+      id="how-it-works"
+    >
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="text-center mb-16">
+          <span className="text-indigo-600 font-semibold uppercase text-xs tracking-wider">
+            Platform
+          </span>
+          <h2 className="sm:text-4xl text-3xl font-semibold text-slate-900 tracking-tight mt-2">
+            Everything you need to automate joy
+          </h2>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <FeatureCard
+            title="Centralized People Data"
+            desc="Import from CSV, connect your HRIS, or add manually. Everything stays organized."
+            tag="Data"
+            tagClass="feature-tag--data"
+          />
+          <FeatureCard
+            title="Smart Templates"
+            desc="Create dynamic templates with variables so every message feels personal."
+            tag="Templates"
+            tagClass="feature-tag--templates"
+          />
+          <FeatureCard
+            title="Precision Scheduling"
+            desc="We automatically calculate the perfect send time based on timezone."
+            tag="Scheduling"
+            tagClass="feature-tag--scheduling"
+          />
+          <FeatureCard
+            title="Team Management"
+            desc="Manage admins, permissions, and organize people into groups."
+            tag="Teams"
+            tagClass="feature-tag--teams"
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const motionRootRef = useRef<Root | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1279,6 +1270,9 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     );
     const closeWaitlistTargets = Array.from(
       container.querySelectorAll<HTMLElement>('[data-action="close-waitlist"]')
+    );
+    const motionContainer = container.querySelector<HTMLDivElement>(
+      '#how-it-works-motion'
     );
     const autoRevealTargets = Array.from(
       container.querySelectorAll<HTMLElement>('section, header, nav, footer')
@@ -1395,6 +1389,12 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     setBilling('monthly');
     showWaitlist();
 
+    if (motionContainer) {
+      motionRootRef.current?.unmount();
+      motionRootRef.current = createRoot(motionContainer);
+      motionRootRef.current.render(<FeatureGridAlive />);
+    }
+
     revealTargets.forEach((target) => {
       const delay = target.dataset.revealDelay;
       if (delay) {
@@ -1494,6 +1494,8 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         button.removeEventListener('click', handleBillingClick);
       });
       revealObserver?.disconnect();
+      motionRootRef.current?.unmount();
+      motionRootRef.current = null;
       waitlistForm?.removeEventListener('submit', handleWaitlistSubmit);
     };
   }, [onLogin, onRegister]);

@@ -109,7 +109,7 @@ export async function computeOnboardingState(prisma: PrismaClient, organizationI
   const hasPeople = peopleCount > 0;
   const hasTemplate = Boolean(defaultTemplate);
   const fallbackFromEmail =
-    process.env.DEFAULT_FROM_EMAIL || 'birthday@mail.olusworks.xyz';
+    process.env.DEFAULT_FROM_EMAIL || 'notifications@usemomentos.xyz';
   const hasSettings =
     Boolean(org?.emailFromAddress || fallbackFromEmail) &&
     org?.birthdaySendHour !== null &&
