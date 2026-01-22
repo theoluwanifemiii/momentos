@@ -145,10 +145,10 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
             value={form.emailFromAddress}
             onChange={(e) => setForm({ ...form, emailFromAddress: e.target.value })}
             className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="notifications@usemomentos.xyz"
+            placeholder="notifications@mail.usemomentos.xyz"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Leave blank to use notifications@usemomentos.xyz.
+            Leave blank to use notifications@mail.usemomentos.xyz.
           </p>
         </div>
           <div>

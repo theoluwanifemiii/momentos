@@ -21,6 +21,7 @@ export interface EmailParams {
     name: string;
     email: string;
   };
+  replyTo?: string;
 }
 
 export class EmailService {
@@ -33,6 +34,7 @@ export class EmailService {
         subject: params.subject,
         html: params.html,
         text: params.text ?? '',
+        replyTo: params.replyTo,
       });
 
       if (result.error) {

@@ -42,8 +42,20 @@ app.use(morgan("dev"));
 // JWT Secret (required via env)
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
 const DEFAULT_FROM_EMAIL =
-  process.env.DEFAULT_FROM_EMAIL || "notifications@usemomentos.xyz";
+  process.env.DEFAULT_FROM_EMAIL || "notifications@mail.usemomentos.xyz";
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
+const WAITLIST_FROM_EMAIL =
+  process.env.WAITLIST_FROM_EMAIL || "founder@mail.usemomentos.xyz";
+const WAITLIST_FROM_NAME =
+  process.env.WAITLIST_FROM_NAME || "Olu from MomentOS";
+const WAITLIST_REPLY_TO =
+  process.env.WAITLIST_REPLY_TO || "founder@usemomentos.xyz";
+const WELCOME_FROM_EMAIL =
+  process.env.WELCOME_FROM_EMAIL || "founder@mail.usemomentos.xyz";
+const WELCOME_FROM_NAME =
+  process.env.WELCOME_FROM_NAME || "Olu from MomentOS";
+const WELCOME_REPLY_TO =
+  process.env.WELCOME_REPLY_TO || "founder@usemomentos.xyz";
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is required");
@@ -445,7 +457,7 @@ app.post("/api/auth/verify", async (req: Request, res: Response) => {
       where: { id: user.organizationId },
     });
 
-    const welcomeFromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+    const welcomeFromEmail = org?.emailFromAddress || WELCOME_FROM_EMAIL;
     if (!welcomeFromEmail) {
       return res.status(400).json({ error: "Sender email not configured" });
     }
@@ -462,9 +474,10 @@ app.post("/api/auth/verify", async (req: Request, res: Response) => {
       html,
       text,
       from: {
-        name: DEFAULT_FROM_NAME || "MomentOS",
+        name: WELCOME_FROM_NAME,
         email: welcomeFromEmail,
       },
+      replyTo: WELCOME_REPLY_TO,
     });
 
     res.json({ success: true });
@@ -578,9 +591,10 @@ app.post("/api/waitlist", async (req: Request, res: Response) => {
       text,
       html,
       from: {
-        name: DEFAULT_FROM_NAME || "MomentOS",
-        email: DEFAULT_FROM_EMAIL,
+        name: WAITLIST_FROM_NAME,
+        email: WAITLIST_FROM_EMAIL,
       },
+      replyTo: WAITLIST_REPLY_TO,
     });
 
     res.json({ success: true });
