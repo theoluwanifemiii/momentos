@@ -35,11 +35,18 @@ const landingMarkup = `
         transition: none;
       }
     }
+    .modal-scroll {
+      scrollbar-width: none;
+    }
+    .modal-scroll::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
   </style>
-  <div id="waitlist-modal" class="fixed inset-0 z-[60] hidden items-center justify-center">
+  <div id="waitlist-modal" class="fixed inset-0 z-[60] hidden items-center justify-center overflow-hidden px-4 py-6">
     <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-action="close-waitlist"></div>
-    <div class="relative w-[92%] max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 p-8 sm:p-10">
-      <div class="flex items-start justify-between gap-4">
+    <div class="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+      <div class="flex items-start justify-between gap-4 px-8 sm:px-10 pt-6 pb-4 bg-white border-b border-slate-100 rounded-t-3xl">
         <div>
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium">
             Early Access
@@ -47,13 +54,14 @@ const landingMarkup = `
           <h3 class="text-3xl sm:text-4xl font-semibold text-slate-900 mt-4">Join our waitlist</h3>
           <p class="text-slate-600 mt-3">Be the first to know when new onboarding spots open.</p>
         </div>
-        <button class="text-slate-400 hover:text-slate-700" aria-label="Close waitlist" data-action="close-waitlist">
+        <button type="button" class="text-slate-400 hover:text-slate-700" aria-label="Close waitlist" data-action="close-waitlist">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
+      <div class="overflow-y-auto modal-scroll px-8 sm:px-10 pb-8">
       <div id="waitlist-success" class="hidden relative mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 px-6 py-8 text-emerald-800 overflow-hidden">
         <div class="confetti" aria-hidden="true">
           <span style="left: 5%; background: #22c55e; animation-delay: 0s;"></span>
@@ -101,7 +109,7 @@ const landingMarkup = `
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
             <label class="text-sm font-medium text-slate-700">Team size</label>
-            <select name="teamSize" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 focus:border-slate-400 focus:outline-none">
+            <select name="teamSize" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 pr-10 text-slate-900 focus:border-slate-400 focus:outline-none">
               <option value="">Select team size</option>
               <option value="1-25">1-25</option>
               <option value="26-50">26-50</option>
@@ -115,13 +123,14 @@ const landingMarkup = `
             <input name="country" type="text" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="United States">
           </div>
         </div>
-        <div class="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2">
-          <p class="text-xs text-slate-500">We will never share your details. Expect a short follow-up.</p>
-          <button type="submit" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+          <p class="text-xs text-slate-500 text-center sm:text-left order-2 sm:order-1">We will never share your details. Expect a short follow-up.</p>
+          <button type="submit" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all order-1 sm:order-2">
             Join waitlist
           </button>
         </div>
       </form>
+      </div>
     </div>
   </div>
 
