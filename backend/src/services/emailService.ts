@@ -34,7 +34,7 @@ export class EmailService {
         subject: params.subject,
         html: params.html,
         text: params.text ?? '',
-        replyTo: params.replyTo,
+        reply_to: params.replyTo,
       });
 
       if (result.error) {
