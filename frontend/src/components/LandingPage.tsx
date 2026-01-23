@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { useEffect, useRef } from 'react';
 import { API_URL } from '../api';
 
 type LandingPageProps = {
@@ -444,8 +442,6 @@ const landingMarkup = `
       </div>
     </div>
   </section>
-
-  <div id="how-it-works-motion"></div>
 
   <section class="bg-slate-50 pt-24 pb-24" id="features">
     <div class="max-w-7xl mr-auto ml-auto pr-6 pl-6">
@@ -1032,207 +1028,8 @@ const landingMarkup = `
   </footer>
 `;
 
-type CardProps = {
-  title: string;
-  desc: string;
-  tag: string;
-  tagClass: string;
-};
-
-function useParallax() {
-  const mx = useMotionValue(0);
-  const my = useMotionValue(0);
-
-  const sx = useSpring(mx, { stiffness: 160, damping: 18, mass: 0.2 });
-  const sy = useSpring(my, { stiffness: 160, damping: 18, mass: 0.2 });
-
-  const px = useTransform(sx, (v) => v * 16);
-  const py = useTransform(sy, (v) => v * 14);
-
-  return { mx, my, px, py };
-}
-
-function FeatureCard({ title, desc, tag, tagClass }: CardProps) {
-  const ref = useRef<HTMLElement | null>(null);
-  const [inside, setInside] = useState(false);
-  const { mx, my, px, py } = useParallax();
-
-  function onMove(e: MouseEvent) {
-    const el = ref.current;
-    if (!el) {
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    const nx = (e.clientX - r.left) / r.width - 0.5;
-    const ny = (e.clientY - r.top) / r.height - 0.5;
-    mx.set(nx);
-    my.set(ny);
-  }
-
-  function onLeave() {
-    setInside(false);
-    mx.set(0);
-    my.set(0);
-  }
-
-  return (
-    <motion.article
-      ref={(node) => {
-        ref.current = node;
-      }}
-      onMouseEnter={() => setInside(true)}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_12px_30px_rgba(2,6,23,0.06)]"
-    >
-      <motion.div
-        className="pointer-events-none absolute -inset-24 opacity-70"
-        style={{
-          translateX: useTransform(px, (v) => v * 2.2),
-          translateY: useTransform(py, (v) => v * 2.2),
-          background:
-            "radial-gradient(circle, rgba(99,102,241,0.18), transparent 55%)",
-        }}
-      />
-
-      <div className="relative">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          <span className={`feature-tag ${tagClass}`}>{tag}</span>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p>
-
-        <div className="relative mt-5 overflow-hidden rounded-xl bg-slate-50 ring-1 ring-slate-100">
-          <motion.div
-            className="absolute left-4 top-4 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100"
-            animate={{ y: [0, -6, 0] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
-            style={{
-              x: useTransform(px, (v) => v * 0.6),
-              y: useTransform(py, (v) => v * 0.4),
-            }}
-          >
-            Auto send
-          </motion.div>
-
-          <motion.div
-            className="absolute right-4 bottom-4 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-100"
-            animate={{ y: [0, 5, 0] }}
-            transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-            style={{
-              x: useTransform(px, (v) => v * 0.5),
-              y: useTransform(py, (v) => v * 0.6),
-            }}
-          >
-            {"{name}"}
-          </motion.div>
-
-          <div className="h-44 w-full" />
-          <motion.div
-            className="pointer-events-none absolute left-0 top-0 h-full w-[40%] opacity-30"
-            animate={{ x: ["-40%", "140%"] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-            style={{
-              background:
-                "linear-gradient(90deg, transparent, rgba(99,102,241,0.35), transparent)",
-            }}
-          />
-
-          <motion.div
-            className="absolute left-10 top-16 h-4 w-[2px] rounded-full bg-slate-900/60"
-            animate={{ opacity: [1, 0.2, 1], x: [0, 10, 0] }}
-            transition={{
-              opacity: { duration: 1.1, repeat: Infinity, ease: "easeInOut" },
-              x: { duration: 3.8, repeat: Infinity, ease: "easeInOut" },
-            }}
-          />
-
-          <motion.div
-            className="pointer-events-none absolute inset-0"
-            animate={inside ? { opacity: 1 } : { opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              className="absolute left-6 bottom-6 rounded-full bg-indigo-500/20 px-3 py-2 text-xs font-medium text-indigo-700"
-              initial={false}
-              animate={inside ? { x: 10, y: -10 } : { x: 0, y: 0 }}
-              transition={{ type: "spring", stiffness: 220, damping: 18 }}
-            >
-              Focus mode
-            </motion.div>
-            <motion.div
-              className="absolute right-6 top-6 rounded-full bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-700"
-              initial={false}
-              animate={inside ? { x: -12, y: 10 } : { x: 0, y: 0 }}
-              transition={{ type: "spring", stiffness: 220, damping: 18 }}
-            >
-              Verified
-            </motion.div>
-          </motion.div>
-        </div>
-
-        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-20" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
-          </span>
-          <span>Always on, never noisy</span>
-        </div>
-      </div>
-    </motion.article>
-  );
-}
-
-function FeatureGridAlive() {
-  return (
-    <section
-      className="bg-slate-50/50 border-slate-100 border-t pt-24 pb-24"
-      id="how-it-works"
-    >
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <span className="text-indigo-600 font-semibold uppercase text-xs tracking-wider">
-            Platform
-          </span>
-          <h2 className="sm:text-4xl text-3xl font-semibold text-slate-900 tracking-tight mt-2">
-            Everything you need to automate joy
-          </h2>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <FeatureCard
-            title="Centralized People Data"
-            desc="Import from CSV, connect your HRIS, or add manually. Everything stays organized."
-            tag="Data"
-            tagClass="feature-tag--data"
-          />
-          <FeatureCard
-            title="Smart Templates"
-            desc="Create dynamic templates with variables so every message feels personal."
-            tag="Templates"
-            tagClass="feature-tag--templates"
-          />
-          <FeatureCard
-            title="Precision Scheduling"
-            desc="We automatically calculate the perfect send time based on timezone."
-            tag="Scheduling"
-            tagClass="feature-tag--scheduling"
-          />
-          <FeatureCard
-            title="Team Management"
-            desc="Manage admins, permissions, and organize people into groups."
-            tag="Teams"
-            tagClass="feature-tag--teams"
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const motionRootRef = useRef<Root | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1270,9 +1067,6 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     );
     const closeWaitlistTargets = Array.from(
       container.querySelectorAll<HTMLElement>('[data-action="close-waitlist"]')
-    );
-    const motionContainer = container.querySelector<HTMLDivElement>(
-      '#how-it-works-motion'
     );
     const autoRevealTargets = Array.from(
       container.querySelectorAll<HTMLElement>('section, header, nav, footer')
@@ -1389,12 +1183,6 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     setBilling('monthly');
     showWaitlist();
 
-    if (motionContainer) {
-      motionRootRef.current?.unmount();
-      motionRootRef.current = createRoot(motionContainer);
-      motionRootRef.current.render(<FeatureGridAlive />);
-    }
-
     revealTargets.forEach((target) => {
       const delay = target.dataset.revealDelay;
       if (delay) {
@@ -1494,8 +1282,6 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         button.removeEventListener('click', handleBillingClick);
       });
       revealObserver?.disconnect();
-      motionRootRef.current?.unmount();
-      motionRootRef.current = null;
       waitlistForm?.removeEventListener('submit', handleWaitlistSubmit);
     };
   }, [onLogin, onRegister]);
