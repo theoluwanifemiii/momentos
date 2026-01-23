@@ -4,14 +4,15 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
-import { PrismaClient, OtpPurpose, Prisma } from "@prisma/client";
+import { PrismaClient, OtpPurpose, Prisma, DeliveryStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { DateTime } from "luxon";
 import { z, ZodError } from "zod";
-import { randomInt } from "crypto";
+import { randomInt, randomBytes, createHash } from "crypto";
 import { CSVValidator } from "./services/csvValidator";
 import { EmailService } from "./services/emailService";
 import {
@@ -35,7 +36,8 @@ const prisma = new PrismaClient();
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
@@ -62,6 +64,11 @@ if (!JWT_SECRET) {
 }
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
+const ADMIN_EMAIL_DOMAIN = process.env.ADMIN_EMAIL_DOMAIN || "usemomentos.xyz";
+const ADMIN_SESSION_TTL_DAYS = Number(
+  process.env.ADMIN_SESSION_TTL_DAYS || 7
+);
+const ADMIN_SESSION_COOKIE = "admin_session";
 
 // OTP helpers: create, send, and verify one-time codes for auth flows.
 function generateOtpCode() {
@@ -189,10 +196,76 @@ async function verifyOtpCode(params: {
   return { valid: true };
 }
 
+function hashToken(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function createAdminSession(
+  adminId: string,
+  req: Request,
+  res: Response
+) {
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + ADMIN_SESSION_TTL_DAYS);
+
+  await prisma.adminSession.create({
+    data: {
+      adminId,
+      tokenHash,
+      expiresAt,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    },
+  });
+
+  res.cookie(ADMIN_SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+  });
+}
+
+async function revokeAdminSession(token?: string) {
+  if (!token) {
+    return;
+  }
+  const tokenHash = hashToken(token);
+  await prisma.adminSession.updateMany({
+    where: { tokenHash, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+async function logAdminAction(params: {
+  adminId: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  metadata?: Prisma.JsonObject;
+}) {
+  await prisma.adminAuditLog.create({
+    data: {
+      adminId: params.adminId,
+      action: params.action,
+      targetType: params.targetType,
+      targetId: params.targetId,
+      metadata: params.metadata ?? {},
+    },
+  });
+}
+
 // Auth middleware
 interface AuthRequest extends Request {
   userId?: string;
   organizationId?: string;
+}
+
+interface AdminAuthRequest extends Request {
+  adminId?: string;
+  adminRole?: "SUPER_ADMIN" | "SUPPORT";
 }
 
 async function authenticate(
@@ -220,9 +293,133 @@ async function authenticate(
   }
 }
 
+async function authenticateAdmin(
+  req: AdminAuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const token = req.cookies?.[ADMIN_SESSION_COOKIE];
+    if (!token) {
+      return res.status(401).json({ error: "Admin authentication required" });
+    }
+
+    const tokenHash = hashToken(token);
+    const session = await prisma.adminSession.findFirst({
+      where: {
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      include: { admin: true },
+    });
+
+    if (!session?.admin || !session.admin.isActive) {
+      return res.status(401).json({ error: "Admin session invalid" });
+    }
+
+    req.adminId = session.adminId;
+    req.adminRole = session.admin.role;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "Admin session invalid" });
+  }
+}
+
+function requireSuperAdmin(req: AdminAuthRequest, res: Response) {
+  if (req.adminRole !== "SUPER_ADMIN") {
+    res.status(403).json({ error: "Super admin access required" });
+    return false;
+  }
+  return true;
+}
+
 // ============================================================================
 // AUTH ROUTES
 // ============================================================================
+
+// Internal admin auth routes
+app.post("/api/internal/admin/auth/login", async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+    });
+
+    const data = schema.parse(req.body);
+    const normalizedEmail = data.email.toLowerCase();
+
+    if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
+      return res.status(403).json({ error: "Admin email domain not allowed" });
+    }
+
+    const admin = await prisma.adminUser.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({ error: "Invalid admin credentials" });
+    }
+
+    const valid = await bcrypt.compare(data.password, admin.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: "Invalid admin credentials" });
+    }
+
+    await prisma.adminUser.update({
+      where: { id: admin.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    await createAdminSession(admin.id, req, res);
+
+    res.json({
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Admin login failed" });
+  }
+});
+
+app.post(
+  "/api/internal/admin/auth/logout",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      await revokeAdminSession(req.cookies?.[ADMIN_SESSION_COOKIE]);
+      res.clearCookie(ADMIN_SESSION_COOKIE);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Logout failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/auth/me",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    const admin = await prisma.adminUser.findUnique({
+      where: { id: req.adminId },
+    });
+
+    if (!admin) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    res.json({
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  }
+);
 
 // Register new organization + admin user
 app.post("/api/auth/register", async (req: Request, res: Response) => {
@@ -350,6 +547,10 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    if (user.isDisabled) {
+      return res.status(403).json({ error: "User account disabled" });
+    }
+
     // Check password
     const valid = await bcrypt.compare(data.password, user.passwordHash);
 
@@ -362,6 +563,11 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
         .status(403)
         .json({ error: "Email not verified", requiresVerification: true });
     }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     // Generate token
     const token = jwt.sign(
@@ -2020,6 +2226,675 @@ app.post(
 // ============================================================================
 // START SERVER
 // ============================================================================
+
+// ============================================================================
+// INTERNAL ADMIN ROUTES (MomentOS staff only)
+// ============================================================================
+
+app.get(
+  "/api/internal/admin/overview",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const [orgCount, userCount, peopleCount] = await Promise.all([
+        prisma.organization.count(),
+        prisma.user.count(),
+        prisma.person.count(),
+      ]);
+
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - 7);
+
+      const [sentToday, sentWeek, failedToday] = await Promise.all([
+        prisma.deliveryLog.count({
+          where: {
+            createdAt: { gte: todayStart },
+            status: { in: ["SENT", "DELIVERED"] },
+          },
+        }),
+        prisma.deliveryLog.count({
+          where: {
+            createdAt: { gte: weekStart },
+            status: { in: ["SENT", "DELIVERED"] },
+          },
+        }),
+        prisma.deliveryLog.count({
+          where: { createdAt: { gte: todayStart }, status: "FAILED" },
+        }),
+      ]);
+
+      const peopleWithOrg = await prisma.person.findMany({
+        where: { optedOut: false },
+        select: {
+          birthday: true,
+          organization: { select: { timezone: true } },
+        },
+      });
+
+      const upcomingBirthdays = peopleWithOrg.filter((person) => {
+        const orgNow = getOrgDateTime(person.organization?.timezone);
+        const windowEnd = orgNow.plus({ days: 7 }).endOf("day");
+        const nextOccurrence = getNextBirthdayOccurrence(
+          person.birthday,
+          orgNow.startOf("day")
+        );
+        return nextOccurrence <= windowEnd;
+      }).length;
+
+      res.json({
+        stats: {
+          totalOrganizations: orgCount,
+          totalUsers: userCount,
+          totalPeople: peopleCount,
+          emailsSentToday: sentToday,
+          emailsSentWeek: sentWeek,
+          failedDeliveriesToday: failedToday,
+          upcomingBirthdays,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Overview failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/orgs",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "25", status, search } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.min(100, parseInt(limit as string, 10) || 25);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: Prisma.OrganizationWhereInput = {};
+      if (status === "suspended") {
+        where.isSuspended = true;
+      }
+      if (status === "active") {
+        where.isSuspended = false;
+      }
+      if (search) {
+        where.name = { contains: String(search), mode: "insensitive" };
+      }
+
+      const [orgs, total] = await Promise.all([
+        prisma.organization.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { createdAt: "desc" },
+          include: {
+            _count: { select: { users: true, people: true } },
+          },
+        }),
+        prisma.organization.count({ where }),
+      ]);
+
+      res.json({
+        organizations: orgs.map((org) => ({
+          id: org.id,
+          name: org.name,
+          plan: org.plan,
+          timezone: org.timezone,
+          emailFromAddress: org.emailFromAddress,
+          isSuspended: org.isSuspended,
+          createdAt: org.createdAt,
+          counts: org._count,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Org list failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/orgs/:id",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const org = await prisma.organization.findUnique({
+        where: { id: req.params.id },
+        include: {
+          _count: { select: { users: true, people: true, templates: true } },
+        },
+      });
+
+      if (!org) {
+        return res.status(404).json({ error: "Organization not found" });
+      }
+
+      res.json({
+        organization: {
+          id: org.id,
+          name: org.name,
+          plan: org.plan,
+          timezone: org.timezone,
+          emailFromName: org.emailFromName,
+          emailFromAddress: org.emailFromAddress,
+          isSuspended: org.isSuspended,
+          suspendedAt: org.suspendedAt,
+          createdAt: org.createdAt,
+          updatedAt: org.updatedAt,
+          counts: org._count,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Org fetch failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/orgs/:id/suspend",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      if (!requireSuperAdmin(req, res)) return;
+      const org = await prisma.organization.update({
+        where: { id: req.params.id },
+        data: { isSuspended: true, suspendedAt: new Date() },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "ORG_SUSPENDED",
+        targetType: "organization",
+        targetId: org.id,
+      });
+      res.json({ organization: org });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Suspend failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/orgs/:id/reactivate",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      if (!requireSuperAdmin(req, res)) return;
+      const org = await prisma.organization.update({
+        where: { id: req.params.id },
+        data: { isSuspended: false, suspendedAt: null },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "ORG_REACTIVATED",
+        targetType: "organization",
+        targetId: org.id,
+      });
+      res.json({ organization: org });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Reactivate failed" });
+    }
+  }
+);
+
+app.delete(
+  "/api/internal/admin/orgs/:id",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      if (!requireSuperAdmin(req, res)) return;
+      const org = await prisma.organization.delete({
+        where: { id: req.params.id },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "ORG_DELETED",
+        targetType: "organization",
+        targetId: org.id,
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Delete failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/orgs/:id/users",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const users = await prisma.user.findMany({
+        where: { organizationId: req.params.id },
+        orderBy: { createdAt: "desc" },
+      });
+      res.json({
+        users: users.map((user) => ({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          emailVerifiedAt: user.emailVerifiedAt,
+          lastLoginAt: user.lastLoginAt,
+          isDisabled: user.isDisabled,
+          createdAt: user.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "User list failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/orgs/:orgId/users/:id/disable",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const user = await prisma.user.update({
+        where: { id: req.params.id, organizationId: req.params.orgId },
+        data: { isDisabled: true },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "USER_DISABLED",
+        targetType: "user",
+        targetId: user.id,
+      });
+      res.json({ user });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Disable failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/orgs/:orgId/users/:id/enable",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const user = await prisma.user.update({
+        where: { id: req.params.id, organizationId: req.params.orgId },
+        data: { isDisabled: false },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "USER_ENABLED",
+        targetType: "user",
+        targetId: user.id,
+      });
+      res.json({ user });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Enable failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/orgs/:orgId/users/:id/verify",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const user = await prisma.user.update({
+        where: { id: req.params.id, organizationId: req.params.orgId },
+        data: { emailVerifiedAt: new Date() },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "USER_VERIFIED",
+        targetType: "user",
+        targetId: user.id,
+      });
+      res.json({ user });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Verify failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/people",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "50", email, orgId } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.min(100, parseInt(limit as string, 10) || 50);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: Prisma.PersonWhereInput = {};
+      if (orgId) where.organizationId = String(orgId);
+      if (email) where.email = { contains: String(email), mode: "insensitive" };
+
+      const [people, total] = await Promise.all([
+        prisma.person.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { createdAt: "desc" },
+          include: { organization: { select: { name: true } } },
+        }),
+        prisma.person.count({ where }),
+      ]);
+
+      res.json({
+        people: people.map((person) => ({
+          id: person.id,
+          fullName: person.fullName,
+          email: person.email,
+          birthday: person.birthday,
+          optedOut: person.optedOut,
+          organization: person.organization.name,
+          createdAt: person.createdAt,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "People fetch failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/internal/admin/people/:id/send-birthday",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const person = await prisma.person.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      if (person.optedOut) {
+        return res.status(400).json({ error: "Person has opted out" });
+      }
+
+      const org = await prisma.organization.findUnique({
+        where: { id: person.organizationId },
+      });
+      const template = await prisma.template.findFirst({
+        where: { organizationId: person.organizationId, isDefault: true },
+      });
+      if (!template) {
+        return res.status(400).json({ error: "No default template found" });
+      }
+
+      const variables = {
+        first_name: person.firstName || person.fullName.split(" ")[0],
+        full_name: person.fullName,
+        organization_name: org?.name || "Your Organization",
+        date: new Date().toLocaleDateString(),
+      };
+      const subject = interpolateTemplate(template.subject, variables);
+      const content = interpolateTemplate(template.content, variables);
+      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+      if (!fromEmail) {
+        return res.status(400).json({ error: "Sender email not configured" });
+      }
+
+      const result = await EmailService.send({
+        to: person.email,
+        subject,
+        html: template.type === "HTML" ? content : undefined,
+        text: template.type === "PLAIN_TEXT" ? content : undefined,
+        from: {
+          name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
+          email: fromEmail,
+        },
+      });
+
+      await prisma.deliveryLog.create({
+        data: {
+          personId: person.id,
+          templateId: template.id,
+          organizationId: person.organizationId,
+          status: "SENT",
+          scheduledFor: new Date(),
+          sentAt: new Date(),
+          externalId: result.id,
+        },
+      });
+
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "BIRTHDAY_SENT_MANUAL",
+        targetType: "person",
+        targetId: person.id,
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Send failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/templates",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { orgId } = req.query;
+      const where: Prisma.TemplateWhereInput = {};
+      if (orgId) where.organizationId = String(orgId);
+
+      const templates = await prisma.template.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        include: { organization: { select: { name: true } } },
+      });
+
+      res.json({
+        templates: templates.map((template) => ({
+          id: template.id,
+          name: template.name,
+          type: template.type,
+          isDefault: template.isDefault,
+          isActive: template.isActive,
+          updatedAt: template.updatedAt,
+          organization: template.organization.name,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Template fetch failed" });
+    }
+  }
+);
+
+app.patch(
+  "/api/internal/admin/templates/:id/disable",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const template = await prisma.template.update({
+        where: { id: req.params.id },
+        data: { isActive: false },
+      });
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "TEMPLATE_DISABLED",
+        targetType: "template",
+        targetId: template.id,
+      });
+      res.json({ template });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Disable failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/delivery-logs",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "50", status, dateFrom, dateTo, orgId } =
+        req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.min(200, parseInt(limit as string, 10) || 50);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: Prisma.DeliveryLogWhereInput = {};
+      if (status) where.status = String(status) as DeliveryStatus;
+      if (orgId) where.organizationId = String(orgId);
+      if (dateFrom || dateTo) {
+        where.createdAt = {};
+        if (dateFrom) {
+          where.createdAt.gte = new Date(String(dateFrom));
+        }
+        if (dateTo) {
+          const endDate = new Date(String(dateTo));
+          endDate.setHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
+        }
+      }
+
+      const [logs, total] = await Promise.all([
+        prisma.deliveryLog.findMany({
+          where,
+          include: {
+            person: true,
+            template: true,
+            organization: { select: { name: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limitNum,
+        }),
+        prisma.deliveryLog.count({ where }),
+      ]);
+
+      res.json({
+        logs: logs.map((log) => ({
+          id: log.id,
+          person: {
+            name: log.person.fullName,
+            email: log.person.email,
+          },
+          template: {
+            name: log.template.name,
+            type: log.template.type,
+          },
+          organization: log.organization.name,
+          status: log.status,
+          scheduledFor: log.scheduledFor,
+          sentAt: log.sentAt,
+          deliveredAt: log.deliveredAt,
+          errorMessage: log.errorMessage,
+          retryCount: log.retryCount,
+          externalId: log.externalId,
+          createdAt: log.createdAt,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Logs fetch failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/internal/admin/delivery-logs/:id/retry",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const log = await prisma.deliveryLog.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!log) {
+        return res.status(404).json({ error: "Delivery log not found" });
+      }
+
+      if (log.status !== "FAILED") {
+        return res
+          .status(400)
+          .json({ error: "Only failed deliveries can be retried" });
+      }
+
+      await prisma.deliveryLog.update({
+        where: { id: log.id },
+        data: {
+          status: "QUEUED",
+          retryCount: log.retryCount + 1,
+          errorMessage: null,
+        },
+      });
+
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "DELIVERY_RETRY_QUEUED",
+        targetType: "delivery_log",
+        targetId: log.id,
+      });
+
+      res.json({ success: true, message: "Delivery queued for retry" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Retry failed" });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/audit-logs",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "50", adminId } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.min(200, parseInt(limit as string, 10) || 50);
+      const skip = (pageNum - 1) * limitNum;
+      const where: Prisma.AdminAuditLogWhereInput = {};
+      if (adminId) where.adminId = String(adminId);
+
+      const [logs, total] = await Promise.all([
+        prisma.adminAuditLog.findMany({
+          where,
+          include: { admin: { select: { email: true, role: true } } },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limitNum,
+        }),
+        prisma.adminAuditLog.count({ where }),
+      ]);
+
+      res.json({
+        logs: logs.map((log) => ({
+          id: log.id,
+          action: log.action,
+          targetType: log.targetType,
+          targetId: log.targetId,
+          admin: log.admin,
+          metadata: log.metadata,
+          createdAt: log.createdAt,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Audit fetch failed" });
+    }
+  }
+);
 
 // ============================================================================
 // ADMIN DASHBOARD ROUTES

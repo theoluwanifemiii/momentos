@@ -19,6 +19,9 @@ model Organization {
   birthdaySendHour   Int      @default(9)
   birthdaySendMinute Int      @default(0)
   birthdayLastRunAt  DateTime?
+  plan      OrgPlan  @default(FREE)
+  isSuspended Boolean @default(false)
+  suspendedAt DateTime?
   
   // Email configuration
   emailFromName    String?
@@ -38,6 +41,12 @@ model Organization {
   @@map("organizations")
 }
 
+enum OrgPlan {
+  FREE
+  TRIAL
+  PAID
+}
+
 // Admin users who manage the system
 model User {
   id             String       @id @default(cuid())
@@ -45,6 +54,8 @@ model User {
   passwordHash   String
   role           UserRole     @default(ADMIN)
   emailVerifiedAt DateTime?
+  lastLoginAt    DateTime?
+  isDisabled     Boolean      @default(false)
   
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -228,4 +239,54 @@ enum DeliveryStatus {
   DELIVERED       // Confirmed delivered by provider
   FAILED          // Failed after retries
   OPTED_OUT       // Person opted out
+}
+
+// Internal admin users (MomentOS staff)
+model AdminUser {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  role         AdminRole    @default(SUPER_ADMIN)
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+
+  sessions     AdminSession[]
+  auditLogs    AdminAuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  SUPPORT
+}
+
+model AdminSession {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@map("admin_sessions")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("admin_audit_logs")
 }
