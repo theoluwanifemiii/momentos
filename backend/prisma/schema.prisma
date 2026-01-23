@@ -252,6 +252,7 @@ model AdminUser {
 
   sessions     AdminSession[]
   auditLogs    AdminAuditLog[]
+  invitesSent  AdminInvite[] @relation("AdminInviteCreator")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -289,4 +290,18 @@ model AdminAuditLog {
   createdAt  DateTime @default(now())
 
   @@map("admin_audit_logs")
+}
+
+model AdminInvite {
+  id         String     @id @default(cuid())
+  email      String
+  role       AdminRole  @default(SUPPORT)
+  tokenHash  String     @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdBy  String
+  creator    AdminUser  @relation("AdminInviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+
+  @@map("admin_invites")
 }
