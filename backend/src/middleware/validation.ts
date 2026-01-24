@@ -43,6 +43,13 @@ export const TemplateUpdateSchema = z
   })
   .strict();
 
+export const OrganizationTemplateUpdateSchema = z
+  .object({
+    isDefault: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict();
+
 // Helper to validate and extract safe fields
 export function validateUpdate<T>(schema: z.ZodSchema<T>, data: unknown): T {
   return schema.parse(data);

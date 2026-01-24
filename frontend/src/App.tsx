@@ -10,6 +10,19 @@ const RegisterForm = lazy(() => import('./components/auth/RegisterForm.tsx'));
 const VerifyForm = lazy(() => import('./components/auth/VerifyForm.tsx'));
 const ForgotPasswordForm = lazy(() => import('./components/auth/ForgotPasswordForm.tsx'));
 const ResetPasswordForm = lazy(() => import('./components/auth/ResetPasswordForm.tsx'));
+const AdminLogin = lazy(() => import('./components/internalAdmin/AdminLogin.tsx'));
+const AdminRegister = lazy(() => import('./components/internalAdmin/AdminRegister.tsx'));
+const AdminLayout = lazy(() => import('./components/internalAdmin/AdminLayout.tsx'));
+const AdminOverview = lazy(() => import('./components/internalAdmin/pages/Overview.tsx'));
+const AdminOrganizations = lazy(() => import('./components/internalAdmin/pages/Organizations.tsx'));
+const AdminOrganizationDetail = lazy(
+  () => import('./components/internalAdmin/pages/OrganizationDetail.tsx')
+);
+const AdminPeople = lazy(() => import('./components/internalAdmin/pages/People.tsx'));
+const AdminTemplates = lazy(() => import('./components/internalAdmin/pages/Templates.tsx'));
+const AdminDeliveryLogs = lazy(() => import('./components/internalAdmin/pages/DeliveryLogs.tsx'));
+const AdminAuditLogs = lazy(() => import('./components/internalAdmin/pages/AuditLogs.tsx'));
+const AdminStaff = lazy(() => import('./components/internalAdmin/pages/Staff.tsx'));
 
 // App shell: auth flow switcher and dashboard entry point.
 export default function MomentOSApp() {
@@ -161,6 +174,39 @@ export default function MomentOSApp() {
             )
           }
         />
+        <Route
+          path="/admin/login"
+          element={
+            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+              <AdminLogin />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/admin/register"
+          element={
+            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+              <AdminRegister />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+              <AdminLayout />
+            </Suspense>
+          }
+        >
+          <Route index element={<AdminOverview />} />
+          <Route path="orgs" element={<AdminOrganizations />} />
+          <Route path="orgs/:id" element={<AdminOrganizationDetail />} />
+          <Route path="staff" element={<AdminStaff />} />
+          <Route path="people" element={<AdminPeople />} />
+          <Route path="templates" element={<AdminTemplates />} />
+          <Route path="delivery-logs" element={<AdminDeliveryLogs />} />
+          <Route path="audit-logs" element={<AdminAuditLogs />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

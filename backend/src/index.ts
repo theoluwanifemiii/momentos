@@ -27,7 +27,7 @@ import {
 import {
   PersonUpdateSchema,
   SettingsUpdateSchema,
-  TemplateUpdateSchema,
+  OrganizationTemplateUpdateSchema,
   validateUpdate,
 } from "./middleware/validation";
 
@@ -69,6 +69,59 @@ const ADMIN_SESSION_TTL_DAYS = Number(
   process.env.ADMIN_SESSION_TTL_DAYS || 7
 );
 const ADMIN_SESSION_COOKIE = "admin_session";
+const ADMIN_BOOTSTRAP_TOKEN = process.env.ADMIN_BOOTSTRAP_TOKEN || "";
+const ADMIN_INVITE_TTL_HOURS = Number(
+  process.env.ADMIN_INVITE_TTL_HOURS || 24
+);
+const ADMIN_INVITE_FROM_EMAIL =
+  process.env.ADMIN_INVITE_FROM_EMAIL || "admin@mail.usemomentos.xyz";
+const ADMIN_INVITE_FROM_NAME =
+  process.env.ADMIN_INVITE_FROM_NAME || "MomentOS Admin";
+const ADMIN_APP_URL =
+  process.env.ADMIN_APP_URL ||
+  process.env.FRONTEND_URL ||
+  "http://localhost:5173";
+
+type AdminRoleType = "SUPER_ADMIN" | "SUPPORT";
+
+const adminSessionCache = new Map<
+  string,
+  { adminId: string; adminRole: AdminRoleType; expiresAt: number }
+>();
+
+const adminUserCache = new Map<
+  string,
+  { expiresAt: number; admin: { id: string; email: string; role: AdminRoleType } }
+>();
+
+const adminCacheStore = new Map<
+  string,
+  { expiresAt: number; status: number; body: unknown }
+>();
+
+const adminCache = (ttlSeconds: number) => {
+  return (req: Request & { adminId?: string }, res: Response, next: any) => {
+    if (req.method !== "GET") return next();
+    const adminId = req.adminId || "unknown";
+    const key = `${adminId}:${req.originalUrl}`;
+    const cached = adminCacheStore.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      res.setHeader("X-Admin-Cache", "HIT");
+      return res.status(cached.status).json(cached.body);
+    }
+    const originalJson = res.json.bind(res);
+    res.json = (body: unknown) => {
+      adminCacheStore.set(key, {
+        expiresAt: Date.now() + ttlSeconds * 1000,
+        status: res.statusCode || 200,
+        body,
+      });
+      res.setHeader("X-Admin-Cache", "MISS");
+      return originalJson(body);
+    };
+    next();
+  };
+};
 
 // OTP helpers: create, send, and verify one-time codes for auth flows.
 function generateOtpCode() {
@@ -202,6 +255,7 @@ function hashToken(value: string) {
 
 async function createAdminSession(
   adminId: string,
+  adminRole: AdminRoleType,
   req: Request,
   res: Response
 ) {
@@ -220,6 +274,12 @@ async function createAdminSession(
     },
   });
 
+  adminSessionCache.set(tokenHash, {
+    adminId,
+    adminRole,
+    expiresAt: Math.min(Date.now() + 15_000, expiresAt.getTime()),
+  });
+
   res.cookie(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -233,6 +293,7 @@ async function revokeAdminSession(token?: string) {
     return;
   }
   const tokenHash = hashToken(token);
+  adminSessionCache.delete(tokenHash);
   await prisma.adminSession.updateMany({
     where: { tokenHash, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -255,6 +316,29 @@ async function logAdminAction(params: {
       metadata: params.metadata ?? {},
     },
   });
+}
+
+async function createAdminInvite(params: {
+  email: string;
+  role: "SUPER_ADMIN" | "SUPPORT";
+  createdBy: string;
+}) {
+  const token = randomBytes(24).toString("hex");
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + ADMIN_INVITE_TTL_HOURS);
+
+  const invite = await prisma.adminInvite.create({
+    data: {
+      email: params.email,
+      role: params.role,
+      tokenHash,
+      expiresAt,
+      createdBy: params.createdBy,
+    },
+  });
+
+  return { invite, token };
 }
 
 // Auth middleware
@@ -305,6 +389,13 @@ async function authenticateAdmin(
     }
 
     const tokenHash = hashToken(token);
+    const cached = adminSessionCache.get(tokenHash);
+    if (cached && cached.expiresAt > Date.now()) {
+      req.adminId = cached.adminId;
+      req.adminRole = cached.adminRole;
+      return next();
+    }
+
     const session = await prisma.adminSession.findFirst({
       where: {
         tokenHash,
@@ -319,7 +410,12 @@ async function authenticateAdmin(
     }
 
     req.adminId = session.adminId;
-    req.adminRole = session.admin.role;
+    req.adminRole = session.admin.role as AdminRoleType;
+    adminSessionCache.set(tokenHash, {
+      adminId: session.adminId,
+      adminRole: session.admin.role as AdminRoleType,
+      expiresAt: Math.min(Date.now() + 15_000, session.expiresAt.getTime()),
+    });
     next();
   } catch (err) {
     res.status(401).json({ error: "Admin session invalid" });
@@ -371,7 +467,7 @@ app.post("/api/internal/admin/auth/login", async (req: Request, res: Response) =
       data: { lastLoginAt: new Date() },
     });
 
-    await createAdminSession(admin.id, req, res);
+    await createAdminSession(admin.id, admin.role as AdminRoleType, req, res);
 
     res.json({
       admin: {
@@ -384,6 +480,137 @@ app.post("/api/internal/admin/auth/login", async (req: Request, res: Response) =
     res.status(400).json({ error: err.message || "Admin login failed" });
   }
 });
+
+app.post(
+  "/api/internal/admin/auth/bootstrap",
+  async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        role: z.enum(["SUPER_ADMIN", "SUPPORT"]).default("SUPER_ADMIN"),
+        token: z.string().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const normalizedEmail = data.email.toLowerCase();
+
+      if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
+        return res.status(403).json({ error: "Admin email domain not allowed" });
+      }
+
+      const existingAdmins = await prisma.adminUser.count();
+      const suppliedToken = data.token || req.headers["x-admin-bootstrap-token"];
+      if (!ADMIN_BOOTSTRAP_TOKEN && existingAdmins > 0) {
+        return res.status(403).json({ error: "Admin bootstrap disabled" });
+      }
+      if (existingAdmins > 0 && suppliedToken !== ADMIN_BOOTSTRAP_TOKEN) {
+        return res.status(403).json({ error: "Invalid bootstrap token" });
+      }
+
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      const admin = await prisma.adminUser.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          role: data.role,
+        },
+      });
+
+      await logAdminAction({
+        adminId: admin.id,
+        action: "ADMIN_BOOTSTRAP",
+        targetType: "admin_user",
+        targetId: admin.id,
+        metadata: { email: admin.email, role: admin.role },
+      });
+
+      res.json({
+        admin: {
+          id: admin.id,
+          email: admin.email,
+          role: admin.role,
+        },
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Admin bootstrap failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/internal/admin/auth/register",
+  async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        token: z.string().min(16),
+      });
+
+      const data = schema.parse(req.body);
+      const normalizedEmail = data.email.toLowerCase();
+
+      if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
+        return res.status(403).json({ error: "Admin email domain not allowed" });
+      }
+
+      const tokenHash = hashToken(data.token);
+      const invite = await prisma.adminInvite.findFirst({
+        where: {
+          tokenHash,
+          email: normalizedEmail,
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (!invite) {
+        return res.status(400).json({ error: "Invite token invalid or expired" });
+      }
+
+      const existing = await prisma.adminUser.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existing) {
+        return res.status(409).json({ error: "Admin already exists" });
+      }
+
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      const admin = await prisma.adminUser.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          role: invite.role,
+        },
+      });
+
+      await prisma.adminInvite.update({
+        where: { id: invite.id },
+        data: { usedAt: new Date() },
+      });
+
+      await logAdminAction({
+        adminId: invite.createdBy,
+        action: "ADMIN_INVITE_ACCEPTED",
+        targetType: "admin_user",
+        targetId: admin.id,
+        metadata: { email: admin.email, role: admin.role },
+      });
+
+      res.json({
+        admin: {
+          id: admin.id,
+          email: admin.email,
+          role: admin.role,
+        },
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Admin signup failed" });
+    }
+  }
+);
 
 app.post(
   "/api/internal/admin/auth/logout",
@@ -402,7 +629,13 @@ app.post(
 app.get(
   "/api/internal/admin/auth/me",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
+    const cached = adminUserCache.get(req.adminId!);
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.json({ admin: cached.admin });
+    }
+
     const admin = await prisma.adminUser.findUnique({
       where: { id: req.adminId },
     });
@@ -411,13 +644,17 @@ app.get(
       return res.status(404).json({ error: "Admin not found" });
     }
 
-    res.json({
-      admin: {
-        id: admin.id,
-        email: admin.email,
-        role: admin.role,
-      },
+    const payload = {
+      id: admin.id,
+      email: admin.email,
+      role: admin.role as AdminRoleType,
+    };
+    adminUserCache.set(req.adminId!, {
+      admin: payload,
+      expiresAt: Date.now() + 30_000,
     });
+
+    res.json({ admin: payload });
   }
 );
 
@@ -1189,16 +1426,19 @@ app.post(
         where: { id: req.organizationId! },
       });
 
-      const template = await prisma.template.findFirst({
+      const templateAssignment = await prisma.organizationTemplate.findFirst({
         where: {
           organizationId: req.organizationId!,
           isDefault: true,
+          isActive: true,
         },
+        include: { template: true },
       });
 
-      if (!template) {
+      if (!templateAssignment) {
         return res.status(400).json({ error: "No default template found" });
       }
+      const template = templateAssignment.template;
 
       const variables = {
         first_name: person.firstName || person.fullName.split(" ")[0],
@@ -1299,16 +1539,22 @@ app.get(
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      const templates = await prisma.template.findMany({
+      const assignments = await prisma.organizationTemplate.findMany({
         where: {
           organizationId: req.organizationId!,
+          isActive: true,
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        include: { template: true },
+        orderBy: { assignedAt: "desc" },
       });
 
-      res.json({ templates });
+      res.json({
+        templates: assignments.map((assignment) => ({
+          ...assignment.template,
+          isDefault: assignment.isDefault,
+          isActive: assignment.isActive,
+        })),
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1323,18 +1569,26 @@ app.get(
     try {
       const { id } = req.params;
 
-      const template = await prisma.template.findFirst({
+      const assignment = await prisma.organizationTemplate.findFirst({
         where: {
-          id,
           organizationId: req.organizationId!,
+          templateId: id,
+          isActive: true,
         },
+        include: { template: true },
       });
 
-      if (!template) {
+      if (!assignment) {
         return res.status(404).json({ error: "Template not found" });
       }
 
-      res.json({ template });
+      res.json({
+        template: {
+          ...assignment.template,
+          isDefault: assignment.isDefault,
+          isActive: assignment.isActive,
+        },
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1347,38 +1601,9 @@ app.post(
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      const schema = z.object({
-        name: z.string().min(1),
-        type: z.enum(["PLAIN_TEXT", "HTML", "CUSTOM_IMAGE"]),
-        subject: z.string().min(1),
-        content: z.string().min(1),
-        imageUrl: z.string().optional(),
+      return res.status(403).json({
+        error: "Custom templates are disabled. Use the default templates.",
       });
-
-      const data = schema.parse(req.body);
-
-      const existingDefault = await prisma.template.findFirst({
-        where: {
-          organizationId: req.organizationId!,
-          isDefault: true,
-        },
-      });
-
-      const template = await prisma.template.create({
-        data: {
-          ...data,
-          organizationId: req.organizationId!,
-          isDefault: !existingDefault,
-          isActive: true,
-        },
-      });
-
-      const onboarding = await computeOnboardingState(
-        prisma,
-        req.organizationId!
-      );
-
-      res.json({ template, onboarding });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -1393,59 +1618,52 @@ app.put(
     try {
       const { id } = req.params;
 
-      const safeData = validateUpdate(TemplateUpdateSchema, req.body);
+      const safeData = validateUpdate(
+        OrganizationTemplateUpdateSchema,
+        req.body
+      );
 
-      let template;
+      const assignment = await prisma.organizationTemplate.findFirst({
+        where: {
+          organizationId: req.organizationId!,
+          templateId: id,
+        },
+        include: { template: true },
+      });
+
+      if (!assignment) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      let updatedAssignment;
       if (safeData?.isDefault === true) {
         const [updated] = await prisma.$transaction([
-          prisma.template.update({
-            where: {
-              id,
-              organizationId: req.organizationId!,
-            },
-            data: {
-              ...safeData,
-              isDefault: true,
-              isActive: true,
-            },
+          prisma.organizationTemplate.update({
+            where: { id: assignment.id },
+            data: { isDefault: true, isActive: true },
           }),
-          prisma.template.updateMany({
+          prisma.organizationTemplate.updateMany({
             where: {
               organizationId: req.organizationId!,
-              id: { not: id },
+              id: { not: assignment.id },
               isDefault: true,
             },
             data: { isDefault: false },
           }),
         ]);
-        template = updated;
+        updatedAssignment = updated;
       } else {
-        template = await prisma.template.update({
-          where: {
-            id,
-            organizationId: req.organizationId!,
+        updatedAssignment = await prisma.organizationTemplate.update({
+          where: { id: assignment.id },
+          data: {
+            ...(safeData.isDefault !== undefined
+              ? { isDefault: safeData.isDefault }
+              : {}),
+            ...(safeData.isActive !== undefined
+              ? { isActive: safeData.isActive }
+              : {}),
           },
-          data: safeData,
         });
-
-        if (safeData?.isDefault === false && template.isDefault === false) {
-          const existingDefault = await prisma.template.findFirst({
-            where: {
-              organizationId: req.organizationId!,
-              isDefault: true,
-            },
-          });
-
-          if (!existingDefault) {
-            await prisma.template.update({
-              where: { id: template.id },
-              data: { isDefault: true, isActive: true },
-            });
-            template = await prisma.template.findUnique({
-              where: { id: template.id },
-            });
-          }
-        }
       }
 
       const onboarding = await computeOnboardingState(
@@ -1453,7 +1671,14 @@ app.put(
         req.organizationId!
       );
 
-      res.json({ template, onboarding });
+      res.json({
+        template: {
+          ...assignment.template,
+          isDefault: updatedAssignment.isDefault,
+          isActive: updatedAssignment.isActive,
+        },
+        onboarding,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1466,56 +1691,9 @@ app.delete(
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { id } = req.params;
-
-      const existing = await prisma.template.findFirst({
-        where: {
-          id,
-          organizationId: req.organizationId!,
-        },
+      return res.status(403).json({
+        error: "Default templates cannot be deleted.",
       });
-
-      if (!existing) {
-        return res.status(404).json({ error: "Template not found" });
-      }
-
-      if (existing.isDefault) {
-        const alternative = await prisma.template.findFirst({
-          where: {
-            organizationId: req.organizationId!,
-            id: { not: id },
-          },
-          orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-        });
-
-        if (!alternative) {
-          return res
-            .status(400)
-            .json({ error: "Cannot delete the only default template" });
-        }
-
-        await prisma.$transaction([
-          prisma.template.delete({
-            where: {
-              id,
-              organizationId: req.organizationId!,
-            },
-          }),
-          prisma.template.update({
-            where: { id: alternative.id },
-            data: { isDefault: true, isActive: true },
-          }),
-        ]);
-      } else {
-        await prisma.template.delete({
-          where: {
-            id,
-            organizationId: req.organizationId!,
-          },
-        });
-      }
-
-      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1530,16 +1708,19 @@ app.post(
     try {
       const { id } = req.params;
 
-      const template = await prisma.template.findFirst({
+      const assignment = await prisma.organizationTemplate.findFirst({
         where: {
-          id,
           organizationId: req.organizationId!,
+          templateId: id,
+          isActive: true,
         },
+        include: { template: true },
       });
 
-      if (!template) {
+      if (!assignment) {
         return res.status(404).json({ error: "Template not found" });
       }
+      const template = assignment.template;
 
       const org = await prisma.organization.findUnique({
         where: { id: req.organizationId! },
@@ -1582,16 +1763,19 @@ app.post(
     try {
       const { id } = req.params;
 
-      const template = await prisma.template.findFirst({
+      const assignment = await prisma.organizationTemplate.findFirst({
         where: {
-          id,
           organizationId: req.organizationId!,
+          templateId: id,
+          isActive: true,
         },
+        include: { template: true },
       });
 
-      if (!template) {
+      if (!assignment) {
         return res.status(404).json({ error: "Template not found" });
       }
+      const template = assignment.template;
 
       const user = await prisma.user.findUnique({
         where: { id: req.userId! },
@@ -1662,17 +1846,6 @@ app.post(
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      const existing = await prisma.template.findMany({
-        where: { organizationId: req.organizationId! },
-        select: { name: true },
-      });
-
-      const existingNames = new Set(existing.map((template) => template.name));
-
-      const org = await prisma.organization.findUnique({
-        where: { id: req.organizationId! },
-      });
-
       const defaultTemplates = [
         {
           name: "Simple Birthday",
@@ -1683,8 +1856,7 @@ app.post(
 Wishing you a wonderful day filled with joy and happiness.
 
 From everyone at {{organization_name}}`,
-          isDefault: true,
-          isActive: true,
+          isSystem: true,
         },
         {
           name: "Professional Birthday",
@@ -1724,9 +1896,8 @@ From everyone at {{organization_name}}`,
     </p>
   </div>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Fun & Colorful",
@@ -1763,9 +1934,8 @@ From everyone at {{organization_name}}`,
     </p>
   </div>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Modern Gradient Birthday",
@@ -1833,9 +2003,8 @@ From everyone at {{organization_name}}`,
     </tr>
   </table>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Minimal & Elegant",
@@ -1890,9 +2059,8 @@ From everyone at {{organization_name}}`,
     </tr>
   </table>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Fun & Colorful (Party Theme)",
@@ -1962,9 +2130,8 @@ From everyone at {{organization_name}}`,
     </tr>
   </table>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Corporate Professional",
@@ -2044,9 +2211,8 @@ From everyone at {{organization_name}}`,
     </tr>
   </table>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
         {
           name: "Warm & Personal (Community Style)",
@@ -2119,34 +2285,74 @@ From everyone at {{organization_name}}`,
     </tr>
   </table>
 </body>
-</html>`,
-          isDefault: false,
-          isActive: false,
+          </html>`,
+          isSystem: true,
         },
       ];
 
-      const toCreate = defaultTemplates.filter(
-        (template) => !existingNames.has(template.name)
+      const existingGlobals = await prisma.template.findMany({
+        where: { name: { in: defaultTemplates.map((template) => template.name) } },
+      });
+      const existingByName = new Map(
+        existingGlobals.map((template) => [template.name, template])
       );
 
-      if (toCreate.length === 0) {
-        const onboarding = await computeOnboardingState(
-          prisma,
-          req.organizationId!
-        );
-        return res.json({ message: "Default templates already exist", onboarding });
+      const createdGlobals = await Promise.all(
+        defaultTemplates
+          .filter((template) => !existingByName.has(template.name))
+          .map((template) =>
+            prisma.template.create({
+              data: {
+                ...template,
+                isActive: true,
+                isSystem: true,
+              },
+            })
+          )
+      );
+
+      const globalTemplates = [
+        ...existingGlobals,
+        ...createdGlobals,
+      ];
+
+      const assignments = await prisma.organizationTemplate.findMany({
+        where: { organizationId: req.organizationId! },
+        select: { templateId: true, isDefault: true },
+      });
+      const assignedIds = new Set(assignments.map((row) => row.templateId));
+
+      const assignmentData = globalTemplates
+        .filter((template) => !assignedIds.has(template.id))
+        .map((template) => ({
+          organizationId: req.organizationId!,
+          templateId: template.id,
+          isDefault: template.name === "Simple Birthday",
+          isActive: true,
+        }));
+
+      if (assignmentData.length > 0) {
+        await prisma.organizationTemplate.createMany({
+          data: assignmentData,
+          skipDuplicates: true,
+        });
       }
 
-      const created = await Promise.all(
-        toCreate.map((template) =>
-          prisma.template.create({
-            data: {
-              ...template,
+      const hasDefault = assignments.some((row) => row.isDefault);
+      if (!hasDefault) {
+        const fallback = globalTemplates.find(
+          (template) => template.name === "Simple Birthday"
+        );
+        if (fallback) {
+          await prisma.organizationTemplate.updateMany({
+            where: {
               organizationId: req.organizationId!,
+              templateId: fallback.id,
             },
-          })
-        )
-      );
+            data: { isDefault: true, isActive: true },
+          });
+        }
+      }
 
       const onboarding = await computeOnboardingState(
         prisma,
@@ -2155,8 +2361,8 @@ From everyone at {{organization_name}}`,
 
       res.json({
         success: true,
-        message: "Default templates created",
-        count: created.length,
+        message: "Default templates assigned",
+        count: assignmentData.length,
         onboarding,
       });
     } catch (err: any) {
@@ -2231,9 +2437,17 @@ app.post(
 // INTERNAL ADMIN ROUTES (MomentOS staff only)
 // ============================================================================
 
+app.use("/api/internal/admin", (req: Request, _res: Response, next) => {
+  if (req.method !== "GET") {
+    adminCacheStore.clear();
+  }
+  next();
+});
+
 app.get(
   "/api/internal/admin/overview",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const [orgCount, userCount, peopleCount] = await Promise.all([
@@ -2302,8 +2516,101 @@ app.get(
 );
 
 app.get(
+  "/api/internal/admin/admins",
+  authenticateAdmin,
+  adminCache(10),
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const admins = await prisma.adminUser.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+      res.json({
+        admins: admins.map((admin) => ({
+          id: admin.id,
+          email: admin.email,
+          role: admin.role,
+          isActive: admin.isActive,
+          lastLoginAt: admin.lastLoginAt,
+          createdAt: admin.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Admin list failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/internal/admin/invites",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        email: z.string().email(),
+        role: z.enum(["SUPER_ADMIN", "SUPPORT"]).default("SUPPORT"),
+      });
+      const data = schema.parse(req.body);
+      const normalizedEmail = data.email.toLowerCase();
+
+      if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
+        return res.status(403).json({ error: "Admin email domain not allowed" });
+      }
+
+      const existing = await prisma.adminUser.findUnique({
+        where: { email: normalizedEmail },
+      });
+      if (existing) {
+        return res.status(409).json({ error: "Admin already exists" });
+      }
+
+      const { invite, token } = await createAdminInvite({
+        email: normalizedEmail,
+        role: data.role,
+        createdBy: req.adminId!,
+      });
+
+      const inviteLink = `${ADMIN_APP_URL}/admin/register?email=${encodeURIComponent(
+        normalizedEmail
+      )}&token=${encodeURIComponent(token)}`;
+
+      await EmailService.send({
+        to: normalizedEmail,
+        subject: "MomentOS Admin Invite",
+        text: `You have been invited to MomentOS admin. Click this link to create your account: ${inviteLink}\n\nInvite token (if prompted): ${token}`,
+        html: `<p>You have been invited to MomentOS admin.</p><p><a href="${inviteLink}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#0f172a;color:#ffffff;text-decoration:none;">Create admin account</a></p><p>If you are prompted for a token, use:</p><p><strong>${token}</strong></p>`,
+        from: {
+          name: ADMIN_INVITE_FROM_NAME,
+          email: ADMIN_INVITE_FROM_EMAIL,
+        },
+        replyTo: WAITLIST_REPLY_TO,
+      });
+
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "ADMIN_INVITE_SENT",
+        targetType: "admin_invite",
+        targetId: invite.id,
+        metadata: { email: invite.email, role: invite.role },
+      });
+
+      res.json({
+        invite: {
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          expiresAt: invite.expiresAt,
+        },
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Invite failed" });
+    }
+  }
+);
+
+app.get(
   "/api/internal/admin/orgs",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const { page = "1", limit = "25", status, search } = req.query;
@@ -2329,7 +2636,7 @@ app.get(
           take: limitNum,
           orderBy: { createdAt: "desc" },
           include: {
-            _count: { select: { users: true, people: true } },
+            _count: { select: { users: true, people: true, templateAssignments: true } },
           },
         }),
         prisma.organization.count({ where }),
@@ -2344,7 +2651,11 @@ app.get(
           emailFromAddress: org.emailFromAddress,
           isSuspended: org.isSuspended,
           createdAt: org.createdAt,
-          counts: org._count,
+          counts: {
+            users: org._count.users,
+            people: org._count.people,
+            templates: org._count.templateAssignments,
+          },
         })),
         pagination: {
           page: pageNum,
@@ -2362,12 +2673,13 @@ app.get(
 app.get(
   "/api/internal/admin/orgs/:id",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const org = await prisma.organization.findUnique({
         where: { id: req.params.id },
         include: {
-          _count: { select: { users: true, people: true, templates: true } },
+          _count: { select: { users: true, people: true, templateAssignments: true } },
         },
       });
 
@@ -2387,7 +2699,11 @@ app.get(
           suspendedAt: org.suspendedAt,
           createdAt: org.createdAt,
           updatedAt: org.updatedAt,
-          counts: org._count,
+          counts: {
+            users: org._count.users,
+            people: org._count.people,
+            templates: org._count.templateAssignments,
+          },
         },
       });
     } catch (err: any) {
@@ -2467,6 +2783,7 @@ app.delete(
 app.get(
   "/api/internal/admin/orgs/:id/users",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const users = await prisma.user.findMany({
@@ -2559,6 +2876,7 @@ app.patch(
 app.get(
   "/api/internal/admin/people",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const { page = "1", limit = "50", email, orgId } = req.query;
@@ -2622,12 +2940,18 @@ app.post(
       const org = await prisma.organization.findUnique({
         where: { id: person.organizationId },
       });
-      const template = await prisma.template.findFirst({
-        where: { organizationId: person.organizationId, isDefault: true },
+      const templateAssignment = await prisma.organizationTemplate.findFirst({
+        where: {
+          organizationId: person.organizationId,
+          isDefault: true,
+          isActive: true,
+        },
+        include: { template: true },
       });
-      if (!template) {
+      if (!templateAssignment) {
         return res.status(400).json({ error: "No default template found" });
       }
+      const template = templateAssignment.template;
 
       const variables = {
         first_name: person.firstName || person.fullName.split(" ")[0],
@@ -2682,31 +3006,111 @@ app.post(
 app.get(
   "/api/internal/admin/templates",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const { orgId } = req.query;
-      const where: Prisma.TemplateWhereInput = {};
+      const where: Prisma.OrganizationTemplateWhereInput = {};
       if (orgId) where.organizationId = String(orgId);
 
-      const templates = await prisma.template.findMany({
+      const assignments = await prisma.organizationTemplate.findMany({
         where,
-        orderBy: { updatedAt: "desc" },
-        include: { organization: { select: { name: true } } },
+        orderBy: { assignedAt: "desc" },
+        include: {
+          template: true,
+          organization: { select: { name: true } },
+        },
       });
 
       res.json({
-        templates: templates.map((template) => ({
-          id: template.id,
-          name: template.name,
-          type: template.type,
-          isDefault: template.isDefault,
-          isActive: template.isActive,
-          updatedAt: template.updatedAt,
-          organization: template.organization.name,
+        templates: assignments.map((assignment) => ({
+          id: assignment.id,
+          templateId: assignment.templateId,
+          name: assignment.template.name,
+          type: assignment.template.type,
+          isDefault: assignment.isDefault,
+          isActive: assignment.isActive,
+          updatedAt: assignment.template.updatedAt,
+          organization: assignment.organization.name,
         })),
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Template fetch failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/internal/admin/templates",
+  authenticateAdmin,
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1),
+        type: z.enum(["PLAIN_TEXT", "HTML", "CUSTOM_IMAGE"]),
+        subject: z.string().min(1),
+        content: z.string().min(1),
+        imageUrl: z.string().optional(),
+        assignAll: z.boolean().optional(),
+        organizationId: z.string().optional(),
+      });
+      const data = schema.parse(req.body);
+
+      const template = await prisma.template.create({
+        data: {
+          name: data.name,
+          type: data.type,
+          subject: data.subject,
+          content: data.content,
+          imageUrl: data.imageUrl,
+          isActive: true,
+          isSystem: false,
+        },
+      });
+
+      let assignedCount = 0;
+      if (data.assignAll) {
+        const orgs = await prisma.organization.findMany({
+          select: { id: true },
+        });
+        if (orgs.length > 0) {
+          await prisma.organizationTemplate.createMany({
+            data: orgs.map((org) => ({
+              organizationId: org.id,
+              templateId: template.id,
+              isDefault: false,
+              isActive: true,
+            })),
+            skipDuplicates: true,
+          });
+          assignedCount = orgs.length;
+        }
+      } else if (data.organizationId) {
+        await prisma.organizationTemplate.create({
+          data: {
+            organizationId: data.organizationId,
+            templateId: template.id,
+            isDefault: false,
+            isActive: true,
+          },
+        });
+        assignedCount = 1;
+      }
+
+      await logAdminAction({
+        adminId: req.adminId!,
+        action: "TEMPLATE_CREATED",
+        targetType: "template",
+        targetId: template.id,
+        metadata: {
+          assignAll: Boolean(data.assignAll),
+          organizationId: data.organizationId || null,
+        },
+      });
+
+      res.json({ template, assignedCount });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || "Template create failed" });
     }
   }
 );
@@ -2716,17 +3120,17 @@ app.patch(
   authenticateAdmin,
   async (req: AdminAuthRequest, res: Response) => {
     try {
-      const template = await prisma.template.update({
+      const assignment = await prisma.organizationTemplate.update({
         where: { id: req.params.id },
         data: { isActive: false },
       });
       await logAdminAction({
         adminId: req.adminId!,
         action: "TEMPLATE_DISABLED",
-        targetType: "template",
-        targetId: template.id,
+        targetType: "organization_template",
+        targetId: assignment.id,
       });
-      res.json({ template });
+      res.json({ assignment });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Disable failed" });
     }
@@ -2736,6 +3140,7 @@ app.patch(
 app.get(
   "/api/internal/admin/delivery-logs",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const { page = "1", limit = "50", status, dateFrom, dateTo, orgId } =
@@ -2853,6 +3258,7 @@ app.post(
 app.get(
   "/api/internal/admin/audit-logs",
   authenticateAdmin,
+  adminCache(10),
   async (req: AdminAuthRequest, res: Response) => {
     try {
       const { page = "1", limit = "50", adminId } = req.query;
@@ -2913,11 +3319,11 @@ app.get(
         where: { organizationId: orgId, optedOut: false },
       });
 
-      const templateCount = await prisma.template.count({
+      const templateCount = await prisma.organizationTemplate.count({
         where: { organizationId: orgId },
       });
 
-      const activeTemplateCount = await prisma.template.count({
+      const activeTemplateCount = await prisma.organizationTemplate.count({
         where: { organizationId: orgId, isActive: true },
       });
 

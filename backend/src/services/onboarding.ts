@@ -95,8 +95,8 @@ export async function computeOnboardingState(prisma: PrismaClient, organizationI
       prisma.person.count({
         where: { organizationId, optedOut: false },
       }),
-      prisma.template.findFirst({
-        where: { organizationId, isDefault: true },
+      prisma.organizationTemplate.findFirst({
+        where: { organizationId, isDefault: true, isActive: true },
       }),
       prisma.deliveryLog.count({
         where: {

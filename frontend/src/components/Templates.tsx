@@ -180,20 +180,6 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this template?')) return;
-    setSaving(true);
-    setError('');
-    try {
-      await api.call(`/templates/${id}`, { method: 'DELETE' });
-      await loadTemplates();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleSetDefault = async (id: string) => {
     const current = templates.find((template) => template.id === id);
     if (!current || current.isDefault) return;
@@ -279,12 +265,9 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-xl font-bold">Templates</h2>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-          >
-            New Template
-          </button>
+          <div className="text-sm text-gray-500">
+            MomentOS provides a curated set of templates.
+          </div>
         </div>
 
         {loading ? (
@@ -350,12 +333,6 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           className="text-blue-600 hover:underline"
                         >
                           Test
-                        </button>
-                        <button
-                          onClick={() => handleDelete(template.id)}
-                          className="text-red-600 hover:underline"
-                        >
-                          Delete
                         </button>
                       </div>
                     </td>
