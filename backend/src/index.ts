@@ -280,10 +280,11 @@ async function createAdminSession(
     expiresAt: Math.min(Date.now() + 15_000, expiresAt.getTime()),
   });
 
+  const isProd = process.env.NODE_ENV === "production";
   res.cookie(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: isProd ? "none" : "lax",
+    secure: isProd,
     maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
   });
 }
