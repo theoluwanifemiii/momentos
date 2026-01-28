@@ -17,7 +17,7 @@ import { Resend } from 'resend';
 
 const prisma = new PrismaClient();
 const DEFAULT_FROM_EMAIL =
-  process.env.DEFAULT_FROM_EMAIL || "birthday@mail.olusworks.xyz";
+  process.env.DEFAULT_FROM_EMAIL || "birthday@mail.usemomentos.xyz";
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 const NOTIFICATIONS_FROM_EMAIL = process.env.NOTIFICATIONS_FROM_EMAIL;
 const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;

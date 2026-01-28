@@ -62,6 +62,60 @@ const landingMarkup = `
       width: 0;
       height: 0;
     }
+    .prefooter-shell {
+      position: relative;
+      overflow: hidden;
+    }
+    .prefooter-glow {
+      animation: prefooterGlow 10s ease-in-out infinite;
+    }
+    .prefooter-glow-right {
+      animation-delay: -4s;
+    }
+    .prefooter-float {
+      animation: prefooterFloat 6s ease-in-out infinite;
+    }
+    .prefooter-float.slow {
+      animation-duration: 8s;
+    }
+    .prefooter-line {
+      position: absolute;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.6), transparent);
+      background-size: 200% 100%;
+      animation: prefooterLine 7s linear infinite;
+    }
+    @keyframes prefooterGlow {
+      0%, 100% {
+        transform: translateY(-50%) translateX(0);
+        opacity: 0.7;
+      }
+      50% {
+        transform: translateY(-50%) translateX(16px);
+        opacity: 1;
+      }
+    }
+    @keyframes prefooterFloat {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-6px);
+      }
+    }
+    @keyframes prefooterLine {
+      0% {
+        background-position: 0% 50%;
+        opacity: 0.4;
+      }
+      50% {
+        opacity: 0.9;
+      }
+      100% {
+        background-position: 200% 50%;
+        opacity: 0.4;
+      }
+    }
   </style>
   <div id="waitlist-modal" class="fixed inset-0 z-[60] hidden items-center justify-center overflow-hidden px-4 py-6">
     <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-action="close-waitlist"></div>
@@ -1154,12 +1208,46 @@ const landingMarkup = `
   </section> -->
 
   <section class="bg-white py-24 border-t border-slate-100">
-    <div class="z-10 text-center max-w-4xl mr-auto ml-auto pr-6 pl-6 relative">
-      <h2 class="sm:text-6xl text-5xl font-semibold text-slate-900 tracking-tight mb-8 reveal" data-reveal>Set it up once. Never forget again.</h2>
-      <p class="text-xl text-slate-600 mb-10 max-w-2xl mx-auto reveal" data-reveal data-reveal-delay="120ms">Start using MomentOS today and turn birthdays into something your team can rely on.</p>
-      <a href="#" data-action="open-waitlist" class="inline-flex justify-center items-center text-lg font-medium text-white bg-indigo-600 rounded-full pt-4 pr-10 pb-4 pl-10 reveal" data-reveal data-reveal-delay="220ms">
-        Join waitlist
-      </a>
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="prefooter-shell relative overflow-hidden rounded-[32px] border border-slate-200 bg-slate-50 px-6 py-16 sm:px-12">
+        <div class="prefooter-glow absolute -left-24 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-indigo-200/40 blur-3xl"></div>
+        <div class="prefooter-glow prefooter-glow-right absolute -right-24 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-blue-200/40 blur-3xl"></div>
+
+        <div class="relative z-10 flex flex-col items-center text-center gap-8">
+          <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Automations
+          </span>
+          <div class="max-w-2xl">
+            <h2 class="text-3xl sm:text-5xl font-semibold text-slate-900 tracking-tight">One-click birthday automation</h2>
+            <p class="mt-4 text-lg text-slate-600">Connect your data once and let MomentOS deliver thoughtful messages automatically — on time, every time.</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <a href="#" data-action="open-waitlist" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-7 py-3 text-sm font-semibold text-white">
+              Join the waitlist
+            </a>
+            <a href="#features" class="inline-flex items-center justify-center rounded-full border border-slate-300 px-7 py-3 text-sm font-semibold text-slate-700">
+              See features
+            </a>
+          </div>
+        </div>
+
+        <div class="pointer-events-none absolute inset-0">
+          <div class="prefooter-line left-6 top-1/2 hidden w-1/4 -translate-y-1/2 sm:block"></div>
+          <div class="prefooter-line right-6 top-1/2 hidden w-1/4 -translate-y-1/2 sm:block"></div>
+
+          <div class="absolute left-8 top-12 hidden flex-col gap-6 sm:flex">
+            <div class="prefooter-float h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">HR</div>
+            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">CSV</div>
+            <div class="prefooter-float h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">API</div>
+          </div>
+
+          <div class="absolute right-8 top-12 hidden flex-col gap-6 sm:flex">
+            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Mail</div>
+            <div class="prefooter-float h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Log</div>
+            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Send</div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 

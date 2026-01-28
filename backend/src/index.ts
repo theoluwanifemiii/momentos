@@ -165,6 +165,7 @@ async function createAndSendOtp(params: {
   userId?: string;
   purpose: OtpPurpose;
   organization?: { name?: string | null; emailFromAddress?: string | null };
+  asyncSend?: boolean;
 }) {
   const code = generateOtpCode();
   const codeHash = await bcrypt.hash(code, 10);
@@ -194,7 +195,7 @@ async function createAndSendOtp(params: {
     purpose: params.purpose === OtpPurpose.REGISTER_VERIFY ? "VERIFY" : "RESET",
   });
 
-  await EmailService.send({
+  const sendPromise = EmailService.send({
     to: params.email,
     subject,
     text,
@@ -204,6 +205,18 @@ async function createAndSendOtp(params: {
       email: fromEmail,
     },
   });
+  if (params.asyncSend) {
+    void sendPromise.catch((error: any) => {
+      console.error("OTP email async send failed:", {
+        email: params.email,
+        purpose: params.purpose,
+        error: error?.message || error,
+      });
+    });
+    return { code };
+  }
+
+  await sendPromise;
 
   return { code };
 }
@@ -731,6 +744,7 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
         name: org.name,
         emailFromAddress: org.emailFromAddress,
       },
+      asyncSend: true,
     });
 
     console.log("Register outcome:", {
@@ -851,6 +865,7 @@ app.post("/api/auth/verify/send", async (req: Request, res: Response) => {
         userId: user.id,
         purpose: OtpPurpose.REGISTER_VERIFY,
         organization: user.organization,
+        asyncSend: true,
       });
     }
 
@@ -949,6 +964,7 @@ app.post("/api/auth/password/forgot", async (req: Request, res: Response) => {
         userId: user.id,
         purpose: OtpPurpose.PASSWORD_RESET,
         organization: user.organization,
+        asyncSend: true,
       });
     }
 
