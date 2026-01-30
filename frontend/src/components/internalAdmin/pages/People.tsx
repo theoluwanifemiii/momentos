@@ -6,6 +6,7 @@ type PersonRow = {
   id: string;
   fullName: string;
   email: string;
+  phone?: string | null;
   birthday: string;
   optedOut: boolean;
   organization: string;
@@ -83,6 +84,7 @@ export default function AdminPeople() {
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Email</th>
+              <th className="px-4 py-3 text-left">Phone</th>
               <th className="px-4 py-3 text-left">Birthday</th>
               <th className="px-4 py-3 text-left">Organization</th>
               <th className="px-4 py-3 text-left">Opted Out</th>
@@ -94,6 +96,7 @@ export default function AdminPeople() {
               <tr key={person.id}>
                 <td className="px-4 py-3 text-slate-700">{person.fullName}</td>
                 <td className="px-4 py-3 text-slate-600">{person.email}</td>
+                <td className="px-4 py-3 text-slate-600">{person.phone || "—"}</td>
                 <td className="px-4 py-3 text-slate-600">
                   {new Date(person.birthday).toLocaleDateString()}
                 </td>
@@ -123,7 +126,7 @@ export default function AdminPeople() {
             ))}
             {people.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                   No people found.
                 </td>
               </tr>

@@ -8,7 +8,7 @@ cmds = ['npm install']
 cmds = ['PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npm run build']
 
 [start]
-cmd = 'npm run start'
+cmd = 'npx prisma migrate deploy && npm run start'
 
 [variables]
 PRISMA_CLI_BINARY_TARGETS = 'debian-openssl-1.1.x'

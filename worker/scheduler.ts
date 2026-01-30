@@ -14,6 +14,7 @@ import { PrismaClient, TemplateType } from '@prisma/client';
 import { DateTime } from 'luxon';
 import cron from 'node-cron';
 import { Resend } from 'resend';
+import { smsService } from './smsService';
 
 const prisma = new PrismaClient();
 const DEFAULT_FROM_EMAIL =
@@ -241,30 +242,59 @@ class BirthdayScheduler {
         throw new Error('DEFAULT_FROM_EMAIL is not configured');
       }
 
-      const result = await this.emailProvider.send({
-        to: person.email,
-        subject,
-        html: template.type === TemplateType.HTML ? content : undefined,
-        text: template.type === TemplateType.PLAIN_TEXT ? content : undefined,
-        from: {
-          name: org.emailFromName || org.name || DEFAULT_FROM_NAME || '',
-          email: fromEmail,
-        },
-      });
+      const channels = template.channels?.length ? template.channels : ['email'];
 
-      // Log delivery
-      await prisma.deliveryLog.create({
-        data: {
-          personId: person.id,
-          templateId: template.id,
-          organizationId: org.id,
-          status: result.success ? 'DELIVERED' : 'FAILED',
-          scheduledFor: new Date(),
-          sentAt: result.success ? new Date() : null,
-          deliveredAt: result.success ? new Date() : null,
-          externalId: result.id,
-        },
-      });
+      if (channels.includes('email')) {
+        const result = await this.emailProvider.send({
+          to: person.email,
+          subject,
+          html: template.type === TemplateType.HTML ? content : undefined,
+          text: template.type === TemplateType.PLAIN_TEXT ? content : undefined,
+          from: {
+            name: org.emailFromName || org.name || DEFAULT_FROM_NAME || '',
+            email: fromEmail,
+          },
+        });
+
+        await prisma.deliveryLog.create({
+          data: {
+            personId: person.id,
+            templateId: template.id,
+            organizationId: org.id,
+            channel: 'email',
+            status: result.success ? 'DELIVERED' : 'FAILED',
+            scheduledFor: new Date(),
+            sentAt: result.success ? new Date() : null,
+            deliveredAt: result.success ? new Date() : null,
+            externalId: result.id,
+          },
+        });
+      }
+
+      if (channels.includes('sms') && org.smsEnabled && person.phone) {
+        const smsContent = content.replace(/<[^>]*>/g, '').substring(0, 160);
+
+        const smsResult = await smsService.send({
+          to: person.phone,
+          message: smsContent,
+          senderId: org.senderId || 'MomentOS',
+        });
+
+        await prisma.deliveryLog.create({
+          data: {
+            personId: person.id,
+            templateId: template.id,
+            organizationId: org.id,
+            channel: 'sms',
+            status: smsResult.success ? 'DELIVERED' : 'FAILED',
+            scheduledFor: new Date(),
+            sentAt: smsResult.success ? new Date() : null,
+            deliveredAt: smsResult.success ? new Date() : null,
+            externalId: smsResult.messageId,
+            errorMessage: smsResult.error,
+          },
+        });
+      }
 
       console.log(`✅ Birthday email sent to ${person.fullName}`);
     } catch (error: any) {
@@ -276,6 +306,7 @@ class BirthdayScheduler {
           personId: person.id,
           templateId: templates[0]?.id,
           organizationId: org.id,
+          channel: 'email',
           status: 'FAILED',
           scheduledFor: new Date(),
           errorMessage: error.message,

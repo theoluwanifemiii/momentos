@@ -29,6 +29,7 @@ export default function PeopleList({
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     birthday: '',
     department: '',
     role: '',
@@ -81,6 +82,7 @@ export default function PeopleList({
           firstName: form.firstName || undefined,
           lastName: form.lastName || undefined,
           email: form.email,
+          phone: form.phone || undefined,
           birthday: form.birthday,
           department: form.department || undefined,
           role: form.role || undefined,
@@ -101,6 +103,7 @@ export default function PeopleList({
         firstName: '',
         lastName: '',
         email: '',
+        phone: '',
         birthday: '',
         department: '',
         role: '',
@@ -268,6 +271,15 @@ export default function PeopleList({
                         />
                       </div>
                       <div>
+                        <label className="block text-sm font-medium mb-1">Phone</label>
+                        <input
+                          value={form.phone}
+                          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="+15551234567"
+                        />
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium mb-1">Birthday</label>
                         <input
                           type="date"
@@ -386,6 +398,7 @@ export default function PeopleList({
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Birthday</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -403,6 +416,9 @@ export default function PeopleList({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">{person.fullName}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{person.email}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {person.phone || '—'}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {new Date(person.birthday).toLocaleDateString()}
                 </td>
@@ -472,6 +488,15 @@ export default function PeopleList({
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="person@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Phone</label>
+                    <input
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="+15551234567"
                     />
                   </div>
                   <div>

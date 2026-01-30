@@ -7,6 +7,57 @@ const FALLBACK_API_URL =
     : DEFAULT_REMOTE_API_URL;
 export const API_URL = ENV_API_URL || FALLBACK_API_URL;
 
+const buildFriendlyError = (
+  payload: any,
+  status?: number,
+  fallback = "Something went wrong. Please try again."
+) => {
+  if (payload?.error && typeof payload.error === "string") return payload.error;
+  if (Array.isArray(payload?.error)) {
+    const details = payload.error
+      .map((detail: any) =>
+        detail?.message
+          ? `${detail.path?.length ? `${detail.path.join(".")}: ` : ""}${detail.message}`
+          : null
+      )
+      .filter(Boolean)
+      .join(", ");
+    if (details) return `Validation failed: ${details}`;
+  }
+  if (payload?.message && typeof payload.message === "string") return payload.message;
+  if (Array.isArray(payload?.details) && payload.details.length > 0) {
+    const details = payload.details
+      .map((detail: any) =>
+        detail?.message
+          ? `${detail.field ? `${detail.field}: ` : ""}${detail.message}`
+          : null
+      )
+      .filter(Boolean)
+      .join(", ");
+    if (details) return `Validation failed: ${details}`;
+  }
+
+  switch (status) {
+    case 400:
+      return "Please check your input and try again.";
+    case 401:
+      return "You're not signed in. Please log in and try again.";
+    case 403:
+      return "You don't have permission to do that.";
+    case 404:
+      return "We couldn't find what you requested.";
+    case 409:
+      return "That already exists. Try a different value.";
+    case 429:
+      return "Too many requests. Please try again shortly.";
+    default:
+      if (status && status >= 500) {
+        return "We hit a server error. Please try again in a moment.";
+      }
+      return fallback;
+  }
+};
+
 export const api = {
   async call(endpoint: string, options: RequestInit = {}) {
     const token = localStorage.getItem("token");
@@ -16,16 +67,28 @@ export const api = {
       ...options.headers,
     };
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch (error) {
+      const err = new Error(
+        "Network error. Please check your connection and try again."
+      ) as any;
+      err.status = 0;
+      err.data = null;
+      throw err;
+    }
 
     const text = await response.text();
     const payload = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
-      const err = new Error(payload?.error || "Request failed") as any;
+      const err = new Error(
+        buildFriendlyError(payload, response.status)
+      ) as any;
       err.status = response.status;
       err.data = payload;
       throw err;
@@ -58,17 +121,29 @@ export const adminApi = {
     adminPending += 1;
     notifyAdmin();
     try {
-      const response = await fetch(`${API_URL}/internal/admin${endpoint}`, {
-        ...options,
-        headers,
-        credentials: "include",
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${API_URL}/internal/admin${endpoint}`, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+      } catch (error) {
+        const err = new Error(
+          "Network error. Please check your connection and try again."
+        ) as any;
+        err.status = 0;
+        err.data = null;
+        throw err;
+      }
 
       const text = await response.text();
       const payload = text ? JSON.parse(text) : null;
 
       if (!response.ok) {
-        const err = new Error(payload?.error || "Request failed") as any;
+        const err = new Error(
+          buildFriendlyError(payload, response.status)
+        ) as any;
         err.status = response.status;
         err.data = payload;
         throw err;

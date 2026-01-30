@@ -3,11 +3,14 @@
 
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
+import { normalizeOptionalPhone } from './phone';
+import { SMSService } from './smsService';
 
 // Validation schema
 const PersonSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(200),
   email: z.string().email('Invalid email address'),
+  phone: z.string().optional(),
   birthday: z.string().min(1, 'Birthday is required'),
   first_name: z.string().optional(),
   department: z.string().optional(),
@@ -29,6 +32,7 @@ export interface ParsedPerson {
   fullName: string;
   firstName?: string;
   email: string;
+  phone?: string | null;
   birthday: Date;
   department?: string;
   role?: string;
@@ -139,6 +143,31 @@ export class CSVValidator {
       
       seenEmails.set(emailLower, rowNum);
       
+      let phone: string | null = null;
+      if (data.phone) {
+        if (!SMSService.isValidNigerianPhone(data.phone)) {
+          errors.push({
+            row: rowNum,
+            field: 'phone',
+            message:
+              'Invalid phone number format. Use: 08012345678 or +2348012345678',
+            data: record,
+          });
+          continue;
+        }
+        try {
+          phone = normalizeOptionalPhone(data.phone);
+        } catch (error: any) {
+          errors.push({
+            row: rowNum,
+            field: 'phone',
+            message: error?.message || 'Invalid phone number',
+            data: record,
+          });
+          continue;
+        }
+      }
+
       // Extract first name if not provided
       const firstName = data.first_name || this.extractFirstName(data.full_name);
       
@@ -147,6 +176,7 @@ export class CSVValidator {
         fullName: data.full_name,
         firstName,
         email: emailLower,
+        phone,
         birthday: birthdayResult.date,
         department: data.department,
         role: data.role,
@@ -180,6 +210,14 @@ export class CSVValidator {
       'email': 'email',
       'email address': 'email',
       'e-mail': 'email',
+
+      'phone': 'phone',
+      'phone number': 'phone',
+      'phonenumber': 'phone',
+      'mobile': 'phone',
+      'mobile number': 'phone',
+      'whatsapp': 'phone',
+      'whatsapp number': 'phone',
       
       'birthday': 'birthday',
       'birth_day': 'birthday',
@@ -277,11 +315,43 @@ export class CSVValidator {
    * Generate a sample CSV for download
    */
   static generateSampleCSV(): string {
-    const headers = ['full_name', 'email', 'birthday', 'first_name', 'department', 'role'];
+    const headers = [
+      'full_name',
+      'email',
+      'phone',
+      'birthday',
+      'first_name',
+      'department',
+      'role',
+    ];
     const samples = [
-      ['Jane Doe', 'jane.doe@example.com', '1990-05-23', 'Jane', 'Engineering', 'Software Engineer'],
-      ['John Smith', 'john.smith@example.com', '1985-12-15', 'John', 'Marketing', 'Marketing Manager'],
-      ['Mary Johnson', 'mary.j@example.com', '1992-03-08', 'Mary', 'Sales', 'Sales Representative'],
+      [
+        'Jane Doe',
+        'jane.doe@example.com',
+        '+14155552671',
+        '1990-05-23',
+        'Jane',
+        'Engineering',
+        'Software Engineer',
+      ],
+      [
+        'John Smith',
+        'john.smith@example.com',
+        '+447700900123',
+        '1985-12-15',
+        'John',
+        'Marketing',
+        'Marketing Manager',
+      ],
+      [
+        'Mary Johnson',
+        'mary.j@example.com',
+        '+2348012345678',
+        '1992-03-08',
+        'Mary',
+        'Sales',
+        'Sales Representative',
+      ],
     ];
     
     const rows = [

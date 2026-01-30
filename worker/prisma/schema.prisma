@@ -23,6 +23,8 @@ model Organization {
   // Email configuration
   emailFromName    String?
   emailFromAddress String?
+  smsEnabled       Boolean   @default(false)
+  senderId         String?   @default("MomentOS")
   
   // Relationships
   users         User[]
@@ -92,6 +94,7 @@ model Person {
   fullName   String
   firstName  String? // Optional - extracted or provided
   email      String
+  phone      String?
   birthday   DateTime // Stored as date only, time ignored
   
   // Optional fields
@@ -128,6 +131,7 @@ model Template {
   // Flags
   isDefault  Boolean     @default(false)
   isActive   Boolean     @default(true)
+  channels   DeliveryChannel[] @default([email])
   
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -146,6 +150,12 @@ enum TemplateType {
   CUSTOM_IMAGE
 }
 
+enum DeliveryChannel {
+  email
+  sms
+  whatsapp
+}
+
 // Delivery tracking
 model DeliveryLog {
   id        String        @id @default(cuid())
@@ -162,6 +172,7 @@ model DeliveryLog {
   
   // Delivery details
   status        DeliveryStatus @default(QUEUED)
+  channel       DeliveryChannel @default(email)
   scheduledFor  DateTime       // When it should be sent
   sentAt        DateTime?      // When it was actually sent
   deliveredAt   DateTime?      // When email was delivered

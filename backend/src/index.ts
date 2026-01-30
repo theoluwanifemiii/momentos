@@ -15,6 +15,8 @@ import { z, ZodError } from "zod";
 import { randomInt, randomBytes, createHash } from "crypto";
 import { CSVValidator } from "./services/csvValidator";
 import { EmailService } from "./services/emailService";
+import { normalizeOptionalPhone } from "./services/phone";
+import { smsService } from "./services/smsService";
 import {
   otpTemplate,
   waitlistWelcomeTemplate,
@@ -82,6 +84,52 @@ const ADMIN_APP_URL =
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
 
+function getUserErrorMessage(error: any, fallback = "Something went wrong. Please try again.") {
+  const issues = error?.errors || error?.issues;
+  if (Array.isArray(issues) && issues.length > 0) {
+    const details = issues
+      .map((issue: any) =>
+        issue?.message
+          ? `${issue.path?.length ? `${issue.path.join(".")}: ` : ""}${issue.message}`
+          : null
+      )
+      .filter(Boolean)
+      .join(", ");
+    if (details) return `Validation failed: ${details}`;
+  }
+
+  const message = error?.message;
+  if (message && typeof message === "string") {
+    if (message.trim().startsWith("[")) {
+      try {
+        const parsed = JSON.parse(message);
+        if (Array.isArray(parsed)) {
+          const details = parsed
+            .map((issue: any) =>
+              issue?.message
+                ? `${issue.path?.length ? `${issue.path.join(".")}: ` : ""}${issue.message}`
+                : null
+            )
+            .filter(Boolean)
+            .join(", ");
+          if (details) return `Validation failed: ${details}`;
+        }
+      } catch {
+        // fall through to other checks
+      }
+    }
+    if (message.toLowerCase().includes("prisma")) return fallback;
+    if (message.toLowerCase().includes("unique constraint")) {
+      return "That already exists. Try a different value.";
+    }
+    if (message.toLowerCase().includes("invalid")) return message;
+    if (message.toLowerCase().includes("not found")) return message;
+    if (message.toLowerCase().includes("required")) return message;
+  }
+  return fallback;
+}
+
+
 type AdminRoleType = "SUPER_ADMIN" | "SUPPORT";
 
 const adminSessionCache = new Map<
@@ -124,6 +172,7 @@ const adminCache = (ttlSeconds: number) => {
 };
 
 // OTP helpers: create, send, and verify one-time codes for auth flows.
+
 function generateOtpCode() {
   return randomInt(0, 1000000).toString().padStart(6, "0");
 }
@@ -160,6 +209,7 @@ function getNextBirthdayOccurrence(birthday: Date, reference: DateTime) {
 }
 
 // Sends an OTP email and stores a hashed record with expiry/attempt limits.
+
 async function createAndSendOtp(params: {
   email: string;
   userId?: string;
@@ -182,7 +232,7 @@ async function createAndSendOtp(params: {
     },
   });
 
-  const fromEmail = params.organization?.emailFromAddress || DEFAULT_FROM_EMAIL;
+  const fromEmail = DEFAULT_FROM_EMAIL;
   const fromName = DEFAULT_FROM_NAME || "MomentOS";
 
   if (!fromEmail) {
@@ -491,7 +541,7 @@ app.post("/api/internal/admin/auth/login", async (req: Request, res: Response) =
       },
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || "Admin login failed" });
+    res.status(400).json({ error: getUserErrorMessage(err, "Admin login failed") });
   }
 });
 
@@ -547,7 +597,7 @@ app.post(
         },
       });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || "Admin bootstrap failed" });
+      res.status(400).json({ error: getUserErrorMessage(err, "Admin bootstrap failed") });
     }
   }
 );
@@ -621,7 +671,7 @@ app.post(
         },
       });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || "Admin signup failed" });
+      res.status(400).json({ error: getUserErrorMessage(err, "Admin signup failed") });
     }
   }
 );
@@ -635,7 +685,7 @@ app.post(
       res.clearCookie(ADMIN_SESSION_COOKIE);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Logout failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Logout failed") });
     }
   }
 );
@@ -775,7 +825,7 @@ app.post("/api/auth/register", async (req: Request, res: Response) => {
       requestId,
       outcome: "failed",
     });
-    res.status(400).json({ error: err.message || "Registration failed" });
+    res.status(400).json({ error: getUserErrorMessage(err, "Registration failed") });
   }
 });
 
@@ -842,7 +892,7 @@ app.post("/api/auth/login", async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || "Login failed" });
+    res.status(400).json({ error: getUserErrorMessage(err, "Login failed") });
   }
 });
 
@@ -874,7 +924,7 @@ app.post("/api/auth/verify/send", async (req: Request, res: Response) => {
       message: "If the account exists, a code was sent.",
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: getUserErrorMessage(err) });
   }
 });
 
@@ -941,7 +991,7 @@ app.post("/api/auth/verify", async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: getUserErrorMessage(err) });
   }
 });
 
@@ -973,7 +1023,7 @@ app.post("/api/auth/password/forgot", async (req: Request, res: Response) => {
       message: "If the account exists, a code was sent.",
     });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: getUserErrorMessage(err) });
   }
 });
 
@@ -1011,7 +1061,7 @@ app.post("/api/auth/password/reset", async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: getUserErrorMessage(err) });
   }
 });
 
@@ -1064,7 +1114,7 @@ app.post("/api/waitlist", async (req: Request, res: Response) => {
         return res.status(409).json({ error: "Email already on waitlist" });
       }
     }
-    res.status(400).json({ error: err.message || "Waitlist signup failed" });
+    res.status(400).json({ error: getUserErrorMessage(err, "Waitlist signup failed") });
   }
 });
 
@@ -1103,6 +1153,7 @@ app.post(
             update: {
               fullName: person.fullName,
               firstName: person.firstName,
+              phone: person.phone ?? null,
               birthday: person.birthday,
               department: person.department,
               role: person.role,
@@ -1112,6 +1163,7 @@ app.post(
               fullName: person.fullName,
               firstName: person.firstName,
               email: person.email,
+              phone: person.phone ?? null,
               birthday: person.birthday,
               department: person.department,
               role: person.role,
@@ -1133,7 +1185,7 @@ app.post(
       });
     } catch (err: any) {
       console.error("CSV upload error:", err);
-      res.status(500).json({ error: "Upload failed", details: err.message });
+      res.status(500).json({ error: "Upload failed", details: getUserErrorMessage(err) });
     }
   }
 );
@@ -1155,7 +1207,7 @@ app.get(
 
       res.json({ people });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1180,6 +1232,7 @@ app.get(
         "full_name",
         "first_name",
         "email",
+        "phone",
         "birthday",
         "department",
         "role",
@@ -1190,6 +1243,7 @@ app.get(
         escape(person.fullName),
         escape(person.firstName || ""),
         escape(person.email),
+        escape(person.phone || ""),
         escape(person.birthday.toISOString().split("T")[0]),
         escape(person.department || ""),
         escape(person.role || ""),
@@ -1204,7 +1258,7 @@ app.get(
       res.setHeader("Content-Disposition", "attachment; filename=people.csv");
       res.send(csv);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1248,7 +1302,7 @@ app.get(
 
       res.json({ upcoming });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1275,6 +1329,7 @@ app.post(
         lastName: z.string().min(1),
         fullName: z.string().optional(),
         email: z.string().email(),
+        phone: z.string().optional(),
         birthday: z.string().min(1),
         department: z.string().optional(),
         role: z.string().optional(),
@@ -1282,23 +1337,42 @@ app.post(
 
       const data = schema.parse(req.body);
       const birthday = new Date(data.birthday);
+      let phone: string | null = null;
+      try {
+        phone = normalizeOptionalPhone(data.phone);
+      } catch (error: any) {
+        return res.status(400).json({ error: error?.message || "Invalid phone number" });
+      }
 
       if (Number.isNaN(birthday.getTime())) {
         return res.status(400).json({ error: "Invalid birthday" });
       }
 
-      const person = await prisma.person.create({
-        data: {
-          organizationId: req.organizationId!,
-          fullName:
-            data.fullName || `${data.firstName} ${data.lastName}`.trim(),
-          firstName: data.firstName,
-          email: data.email.toLowerCase(),
-          birthday,
-          department: data.department,
-          role: data.role,
-        },
-      });
+      let person;
+      try {
+        person = await prisma.person.create({
+          data: {
+            organizationId: req.organizationId!,
+            fullName:
+              data.fullName || `${data.firstName} ${data.lastName}`.trim(),
+            firstName: data.firstName,
+            email: data.email.toLowerCase(),
+            phone,
+            birthday,
+            department: data.department,
+            role: data.role,
+          },
+        });
+      } catch (err: any) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError) {
+          if (err.code === "P2002") {
+            return res
+              .status(409)
+              .json({ error: "Email already exists for this organization" });
+          }
+        }
+        throw err;
+      }
 
       const onboarding = await computeOnboardingState(
         prisma,
@@ -1307,7 +1381,7 @@ app.post(
 
       res.json({ person, onboarding });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1324,6 +1398,18 @@ app.put(
       if ("email" in safeData && safeData.email) {
         safeData = { ...safeData, email: safeData.email.toLowerCase() };
       }
+      if ("phone" in safeData) {
+        try {
+          const normalizedPhone = normalizeOptionalPhone(
+            (safeData as any).phone
+          );
+          safeData = { ...safeData, phone: normalizedPhone };
+        } catch (error: any) {
+          return res
+            .status(400)
+            .json({ error: error?.message || "Invalid phone number" });
+        }
+      }
 
       const person = await prisma.person.update({
         where: {
@@ -1335,7 +1421,7 @@ app.put(
 
       res.json({ person });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1357,7 +1443,7 @@ app.delete(
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1383,7 +1469,7 @@ app.post(
 
       res.json({ success: true, deleted: result.count });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1411,7 +1497,7 @@ app.post(
 
       res.json({ success: true, updated: result.count });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1498,7 +1584,7 @@ app.post(
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1523,7 +1609,7 @@ app.get(
 
       res.json({ organization: org, onboarding });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1542,7 +1628,7 @@ app.put(
 
       res.json({ organization: org });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1573,7 +1659,7 @@ app.get(
         })),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1607,7 +1693,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1622,7 +1708,7 @@ app.post(
         error: "Custom templates are disabled. Use the default templates.",
       });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1697,7 +1783,7 @@ app.put(
         onboarding,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1712,7 +1798,7 @@ app.delete(
         error: "Default templates cannot be deleted.",
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1767,7 +1853,7 @@ app.post(
         type: template.type,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -1852,7 +1938,7 @@ app.post(
       });
     } catch (err: any) {
       console.error("Test send error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -2383,7 +2469,7 @@ From everyone at {{organization_name}}`,
         onboarding,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -2403,7 +2489,7 @@ app.get(
       );
       res.json({ onboarding });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -2425,7 +2511,7 @@ app.post(
       );
       res.json({ onboarding });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -2441,7 +2527,7 @@ app.post(
       );
       res.json({ onboarding });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -2527,7 +2613,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Overview failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Overview failed") });
     }
   }
 );
@@ -2552,7 +2638,7 @@ app.get(
         })),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Admin list failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Admin list failed") });
     }
   }
 );
@@ -2619,7 +2705,7 @@ app.post(
         },
       });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || "Invite failed" });
+      res.status(400).json({ error: getUserErrorMessage(err, "Invite failed") });
     }
   }
 );
@@ -2682,7 +2768,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Org list failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Org list failed") });
     }
   }
 );
@@ -2724,7 +2810,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Org fetch failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Org fetch failed") });
     }
   }
 );
@@ -2747,7 +2833,7 @@ app.patch(
       });
       res.json({ organization: org });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Suspend failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Suspend failed") });
     }
   }
 );
@@ -2770,7 +2856,7 @@ app.patch(
       });
       res.json({ organization: org });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Reactivate failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Reactivate failed") });
     }
   }
 );
@@ -2792,7 +2878,7 @@ app.delete(
       });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Delete failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Delete failed") });
     }
   }
 );
@@ -2819,7 +2905,7 @@ app.get(
         })),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "User list failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "User list failed") });
     }
   }
 );
@@ -2841,7 +2927,7 @@ app.patch(
       });
       res.json({ user });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Disable failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Disable failed") });
     }
   }
 );
@@ -2863,7 +2949,7 @@ app.patch(
       });
       res.json({ user });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Enable failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Enable failed") });
     }
   }
 );
@@ -2885,7 +2971,7 @@ app.patch(
       });
       res.json({ user });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Verify failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Verify failed") });
     }
   }
 );
@@ -2921,6 +3007,7 @@ app.get(
           id: person.id,
           fullName: person.fullName,
           email: person.email,
+          phone: person.phone,
           birthday: person.birthday,
           optedOut: person.optedOut,
           organization: person.organization.name,
@@ -2934,7 +3021,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "People fetch failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "People fetch failed") });
     }
   }
 );
@@ -3015,7 +3102,7 @@ app.post(
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Send failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Send failed") });
     }
   }
 );
@@ -3052,7 +3139,7 @@ app.get(
         })),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Template fetch failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Template fetch failed") });
     }
   }
 );
@@ -3127,7 +3214,7 @@ app.post(
 
       res.json({ template, assignedCount });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || "Template create failed" });
+      res.status(400).json({ error: getUserErrorMessage(err, "Template create failed") });
     }
   }
 );
@@ -3149,7 +3236,7 @@ app.patch(
       });
       res.json({ assignment });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Disable failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Disable failed") });
     }
   }
 );
@@ -3225,7 +3312,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Logs fetch failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Logs fetch failed") });
     }
   }
 );
@@ -3267,7 +3354,7 @@ app.post(
 
       res.json({ success: true, message: "Delivery queued for retry" });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Retry failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Retry failed") });
     }
   }
 );
@@ -3314,7 +3401,7 @@ app.get(
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Audit fetch failed" });
+      res.status(500).json({ error: getUserErrorMessage(err, "Audit fetch failed") });
     }
   }
 );
@@ -3459,7 +3546,49 @@ app.get(
       });
     } catch (err: any) {
       console.error("Overview error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
+    }
+  }
+);
+
+// Test SMS delivery (admin/org scope)
+app.post(
+  "/api/admin/test-sms",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        phone: z.string().min(1),
+        message: z.string().optional(),
+      });
+      const data = schema.parse(req.body);
+
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      const result = await smsService.send({
+        to: data.phone,
+        message: data.message || "Test message from MomentOS",
+        senderId: org?.senderId || "MomentOS",
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: getUserErrorMessage(err) });
+    }
+  }
+);
+
+app.get(
+  "/api/admin/sms-balance",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const balance = await smsService.getBalance();
+      res.json({ balance });
+    } catch (err: any) {
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -3539,7 +3668,7 @@ app.get(
       });
     } catch (err: any) {
       console.error("Delivery logs error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -3628,7 +3757,7 @@ app.get(
       res.send(csv);
     } catch (err: any) {
       console.error("Delivery logs export error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -3701,7 +3830,7 @@ app.get(
       });
     } catch (err: any) {
       console.error("Delivery stats error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );
@@ -3750,7 +3879,7 @@ app.post(
         message: "Delivery queued for retry",
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
 );

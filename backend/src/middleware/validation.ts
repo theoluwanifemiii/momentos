@@ -7,6 +7,7 @@ export const PersonUpdateSchema = z
     fullName: z.string().optional(),
     firstName: z.string().optional(),
     email: z.string().email().optional(),
+    phone: z.string().nullable().optional(),
     birthday: z.coerce.date().optional(),
     department: z.string().optional(),
     role: z.string().optional(),
@@ -26,6 +27,8 @@ export const SettingsUpdateSchema = z
       .optional(),
     emailFromName: z.string().optional(),
     emailFromAddress: z.string().email().optional(),
+    smsEnabled: z.boolean().optional(),
+    senderId: z.string().max(11).optional(),
     birthdaySendHour: z.number().min(0).max(23).optional(),
     birthdaySendMinute: z.number().min(0).max(59).optional(),
   })

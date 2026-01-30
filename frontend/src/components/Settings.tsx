@@ -21,6 +21,8 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
   const [form, setForm] = useState({
     emailFromName: '',
     emailFromAddress: '',
+    smsEnabled: false,
+    senderId: 'MomentOS',
     timezone: 'UTC',
     birthdaySendHour: 9,
     birthdaySendMinute: 0,
@@ -39,6 +41,8 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
       setForm({
         emailFromName: org.emailFromName || '',
         emailFromAddress: org.emailFromAddress || '',
+        smsEnabled: Boolean(org.smsEnabled),
+        senderId: org.senderId || 'MomentOS',
         timezone: org.timezone || 'UTC',
         birthdaySendHour: org.birthdaySendHour ?? 9,
         birthdaySendMinute: org.birthdaySendMinute ?? 0,
@@ -60,6 +64,8 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
         body: JSON.stringify({
           emailFromName: form.emailFromName || null,
           emailFromAddress: form.emailFromAddress || null,
+          smsEnabled: form.smsEnabled,
+          senderId: form.senderId || null,
           timezone: form.timezone,
           birthdaySendHour: Number(form.birthdaySendHour),
           birthdaySendMinute: Number(form.birthdaySendMinute),
@@ -151,6 +157,37 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
             Leave blank to use notifications@mail.usemomentos.xyz.
           </p>
         </div>
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={form.smsEnabled}
+                onChange={(e) => setForm({ ...form, smsEnabled: e.target.checked })}
+              />
+              Enable SMS Delivery
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Sends birthday messages by SMS when a phone number is available.
+            </p>
+          </div>
+          {form.smsEnabled && (
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-1">SMS Sender ID</label>
+              <input
+                type="text"
+                value={form.senderId}
+                onChange={(e) =>
+                  setForm({ ...form, senderId: e.target.value.substring(0, 11) })
+                }
+                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="MomentOS"
+                maxLength={11}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Max 11 characters. Sender ID must be approved by Termii.
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-1">Timezone</label>
             <select
