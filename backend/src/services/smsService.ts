@@ -8,13 +8,18 @@ interface SMSParams {
 
 export class SMSService {
   private apiKey: string;
-  private baseUrl = 'https://v3.api.termii.com';
+  private baseUrl = 'https://v3.api.termii.com/api';
+  private testMode: boolean;
 
   constructor() {
     this.apiKey = process.env.TERMII_API_KEY || '';
+    this.testMode = this.isTestModeEnabled();
 
     if (!this.apiKey) {
       console.warn('⚠️ TERMII_API_KEY not set. SMS will not work.');
+    }
+    if (this.testMode) {
+      console.warn('⚠️ SMS_TEST_MODE enabled. SMS will be mocked.');
     }
   }
 
@@ -26,6 +31,12 @@ export class SMSService {
     messageId?: string;
     error?: string;
   }> {
+    if (this.testMode) {
+      const phone = this.formatPhoneNumber(params.to);
+      const messageId = `mock-${Date.now()}`;
+      console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
+      return { success: true, messageId };
+    }
     if (!this.apiKey) {
       return { success: false, error: 'TERMII_API_KEY is not configured' };
     }
@@ -56,10 +67,15 @@ export class SMSService {
         error: response.data.message,
       };
     } catch (error: any) {
-      console.error('SMS Service Error:', error.message);
+      const errorDetail =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.response?.data ||
+        error.message;
+      console.error('SMS Service Error:', errorDetail);
       return {
         success: false,
-        error: error.message,
+        error: typeof errorDetail === 'string' ? errorDetail : 'SMS request failed',
       };
     }
   }
@@ -99,6 +115,7 @@ export class SMSService {
    * Check account balance
    */
   async getBalance(): Promise<number> {
+    if (this.testMode) return 0;
     if (!this.apiKey) return 0;
 
     try {
@@ -110,6 +127,11 @@ export class SMSService {
       console.error('Failed to get Termii balance:', error);
       return 0;
     }
+  }
+
+  private isTestModeEnabled() {
+    const raw = (process.env.SMS_TEST_MODE || '').toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'yes';
   }
 }
 

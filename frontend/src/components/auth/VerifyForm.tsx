@@ -19,9 +19,10 @@ export default function VerifyForm({ email, onSuccess, onBackToLogin }: VerifyFo
     setMessage('');
     setLoading(true);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       await api.call('/auth/verify', {
         method: 'POST',
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email: normalizedEmail, code }),
       });
       setMessage('Account verified. You can sign in.');
       onSuccess();
@@ -36,9 +37,10 @@ export default function VerifyForm({ email, onSuccess, onBackToLogin }: VerifyFo
     setError('');
     setMessage('');
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       await api.call('/auth/verify/send', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       setMessage('Verification code sent.');
     } catch (err: any) {

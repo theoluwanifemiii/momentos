@@ -18,12 +18,13 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
     setMessage('');
     setLoading(true);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       await api.call('/auth/password/forgot', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       setMessage('If the account exists, a code was sent.');
-      onSuccess(email);
+      onSuccess(normalizedEmail);
     } catch (err: any) {
       setError(`Reset request failed: ${err.message}`);
     } finally {

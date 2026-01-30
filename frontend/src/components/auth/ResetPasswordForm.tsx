@@ -26,9 +26,10 @@ export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: R
     setMessage('');
     setLoading(true);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       await api.call('/auth/password/reset', {
         method: 'POST',
-        body: JSON.stringify({ email, code, password }),
+        body: JSON.stringify({ email: normalizedEmail, code, password }),
       });
       setMessage('Password updated. You can sign in.');
       onSuccess();

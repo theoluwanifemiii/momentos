@@ -6,13 +6,18 @@ interface SMSParams {
 
 export class SMSService {
   private apiKey: string;
-  private baseUrl = 'https://v3.api.termii.com';
+  private baseUrl = 'https://v3.api.termii.com/api';
+  private testMode: boolean;
 
   constructor() {
     this.apiKey = process.env.TERMII_API_KEY || '';
+    this.testMode = this.isTestModeEnabled();
 
     if (!this.apiKey) {
       console.warn('⚠️ TERMII_API_KEY not set. SMS will not work.');
+    }
+    if (this.testMode) {
+      console.warn('⚠️ SMS_TEST_MODE enabled. SMS will be mocked.');
     }
   }
 
@@ -21,6 +26,12 @@ export class SMSService {
     messageId?: string;
     error?: string;
   }> {
+    if (this.testMode) {
+      const phone = this.formatPhoneNumber(params.to);
+      const messageId = `mock-${Date.now()}`;
+      console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
+      return { success: true, messageId };
+    }
     if (!this.apiKey) {
       return { success: false, error: 'TERMII_API_KEY is not configured' };
     }
@@ -40,7 +51,8 @@ export class SMSService {
         }),
       });
 
-      const data = (await response.json()) as any;
+      const text = await response.text();
+      const data = text ? (JSON.parse(text) as any) : {};
 
       if (data.code === 'ok') {
         console.log(`✅ SMS sent to ${phone}: ${data.message_id}`);
@@ -50,10 +62,10 @@ export class SMSService {
         };
       }
 
-      console.error(`❌ SMS failed: ${data.message}`);
+      console.error(`❌ SMS failed: ${data.message || text || response.status}`);
       return {
         success: false,
-        error: data.message,
+        error: data.message || text || `Request failed with status ${response.status}`,
       };
     } catch (error: any) {
       console.error('SMS Service Error:', error.message);
@@ -76,6 +88,11 @@ export class SMSService {
     }
 
     return cleaned;
+  }
+
+  private isTestModeEnabled() {
+    const raw = (process.env.SMS_TEST_MODE || '').toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'yes';
   }
 }
 

@@ -26,14 +26,15 @@ export default function LoginForm({
     setLoading(true);
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const data = await api.call('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
       onSuccess(data);
     } catch (err: any) {
       if (err?.data?.requiresVerification) {
-        onRequireVerification(email);
+        onRequireVerification(email.trim().toLowerCase());
         return;
       }
       setError(`Sign in failed: ${err.message}`);

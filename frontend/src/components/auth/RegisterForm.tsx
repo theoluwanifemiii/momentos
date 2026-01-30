@@ -30,11 +30,17 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
     setLoading(true);
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const data = await api.call('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, password, organizationName, timezone }),
+        body: JSON.stringify({
+          email: normalizedEmail,
+          password,
+          organizationName,
+          timezone,
+        }),
       });
-      onSuccess(data, email);
+      onSuccess(data, normalizedEmail);
     } catch (err: any) {
       setError(`Registration failed: ${err.message}`);
     } finally {
