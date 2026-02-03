@@ -22,6 +22,70 @@ const DEFAULT_FROM_EMAIL =
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 const NOTIFICATIONS_FROM_EMAIL = process.env.NOTIFICATIONS_FROM_EMAIL;
 const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const generatePersonalizedIntro = async (input: {
+  fullName: string;
+  firstName?: string | null;
+  role?: string | null;
+  department?: string | null;
+  organizationName?: string | null;
+}) => {
+  if (!OPENAI_API_KEY) return null;
+  const prompt = `
+Write one short, friendly sentence to personalize a birthday email intro.
+Use the person's role/department if provided. Do not include emojis.
+Return JSON as {"intro": "..."}.
+Person:
+- Full name: ${input.fullName}
+- First name: ${input.firstName || ""}
+- Role: ${input.role || ""}
+- Department: ${input.department || ""}
+- Organization: ${input.organizationName || ""}
+`;
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You write short, tasteful personalization lines." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 200,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (!content) return null;
+  try {
+    const data = JSON.parse(content);
+    if (!data?.intro) return null;
+    return String(data.intro).trim();
+  } catch {
+    return null;
+  }
+};
 
 // Email provider interface (to be implemented)
 interface EmailProvider {
@@ -222,18 +286,34 @@ class BirthdayScheduler {
         return;
       }
 
+      const personalizedIntro = await generatePersonalizedIntro({
+        fullName: person.fullName,
+        firstName: person.firstName,
+        role: person.role,
+        department: person.department,
+        organizationName: org.name,
+      });
+
       // Interpolate variables
-      const content = this.interpolateTemplate(template.content, {
+      let content = this.interpolateTemplate(template.content, {
         first_name: person.firstName || person.fullName.split(' ')[0],
         full_name: person.fullName,
         organization_name: org.name,
         date: new Date().toLocaleDateString(),
+        personalized_intro: personalizedIntro || '',
       });
 
       const subject = this.interpolateTemplate(template.subject, {
         first_name: person.firstName || person.fullName.split(' ')[0],
         full_name: person.fullName,
       });
+
+      if (personalizedIntro && !template.content.includes('{{personalized_intro}}')) {
+        content =
+          template.type === TemplateType.HTML
+            ? `<p>${escapeHtml(personalizedIntro)}</p>${content}`
+            : `${personalizedIntro}\n\n${content}`;
+      }
 
       // Send email via provider.
       const fromEmail = org.emailFromAddress || DEFAULT_FROM_EMAIL;

@@ -194,6 +194,26 @@ export class CSVValidator {
       },
     };
   }
+
+  /**
+   * Extract header fields from CSV content
+   */
+  static extractHeaders(csvContent: string): string[] {
+    try {
+      const rows = parse(csvContent, {
+        columns: false,
+        to_line: 1,
+        skip_empty_lines: true,
+        trim: true,
+        bom: true,
+      }) as string[][];
+
+      if (!rows.length) return [];
+      return rows[0].map((value) => value.toString().trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
   
   /**
    * Normalize CSV column names (handle case variations, spaces)

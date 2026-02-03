@@ -11,6 +11,7 @@ import { registerTemplatesRoutes } from "./routes/Templates";
 import { registerOnboardingRoutes } from "./routes/Onboarding";
 import { registerInternalAdminRoutes } from "./routes/InternalAdmin";
 import { registerAdminDashboardRoutes } from "./routes/AdminDashboard";
+import { registerAiRoutes } from "./routes/AI";
 
 const app = express();
 
@@ -31,5 +32,6 @@ registerTemplatesRoutes(app);
 registerOnboardingRoutes(app);
 registerInternalAdminRoutes(app);
 registerAdminDashboardRoutes(app);
+registerAiRoutes(app);
 
 export default app;

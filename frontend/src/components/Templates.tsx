@@ -28,6 +28,9 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
   const [successMessage, setSuccessMessage] = useState('');
   const [editorMode, setEditorMode] = useState<'plain' | 'code'>('plain');
   const [plainContent, setPlainContent] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
   const [form, setForm] = useState({
     name: '',
     type: 'PLAIN_TEXT',
@@ -111,12 +114,48 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       });
       setPlainContent('');
       setEditorMode('plain');
+      setAiPrompt('');
+      setAiError('');
       setShowCreateModal(false);
       await loadTemplates();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setAiPrompt('');
+    setAiError('');
+  };
+
+  const handleGenerateDraft = async () => {
+    if (!aiPrompt.trim()) {
+      setAiError('Add a short message for the AI to draft from.');
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const data = await api.call('/ai/template-draft', {
+        method: 'POST',
+        body: JSON.stringify({ message: aiPrompt.trim() }),
+      });
+      setForm((prev) => ({
+        ...prev,
+        type: data.type || 'PLAIN_TEXT',
+        subject: data.subject || prev.subject,
+        content: data.content || prev.content,
+      }));
+      setPlainContent(data.content || '');
+      setEditorMode('plain');
+    } catch (err: any) {
+      setAiError(err.message || 'AI draft failed.');
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -348,14 +387,14 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         <div className="fixed inset-0 z-50">
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={() => setShowCreateModal(false)}
+            onClick={closeCreateModal}
           />
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
               <div className="flex items-center justify-between px-6 py-4 border-b">
                 <h3 className="text-lg font-bold">Create Template</h3>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeCreateModal}
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Close
@@ -426,6 +465,29 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     />
                   </div>
                   <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">AI Draft (optional)</label>
+                    <textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      className="w-full h-24 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Paste your message or notes. Example: Write a warm, faith-based birthday note for a church member."
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateDraft}
+                        disabled={aiLoading}
+                        className="px-3 py-2 rounded border text-sm text-blue-700 border-blue-200 hover:bg-blue-50 disabled:opacity-60"
+                      >
+                        {aiLoading ? 'Generating...' : 'Generate with AI'}
+                      </button>
+                      <span className="text-xs text-gray-500">
+                        Drafts a subject + message in plain text.
+                      </span>
+                    </div>
+                    {aiError && <p className="text-xs text-red-600 mt-2">{aiError}</p>}
+                  </div>
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Content</label>
                     <textarea
                       value={editorMode === 'plain' ? plainContent : form.content}
@@ -459,7 +521,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
 
                 <div className="mt-4 flex justify-end gap-3">
                   <button
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={closeCreateModal}
                     className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
                   >
                     Cancel

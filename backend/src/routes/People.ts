@@ -6,11 +6,20 @@ import { EmailService } from "../services/emailService";
 import { normalizeOptionalPhone } from "../services/phone";
 import { computeOnboardingState } from "../services/onboarding";
 import { PersonUpdateSchema, validateUpdate } from "../middleware/validation";
+import { generateCsvSuggestions, generatePersonalizedIntro } from "../services/ai";
 import { authenticate, AuthRequest, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, getNextBirthdayOccurrence, getOrgDateTime, getUserErrorMessage, interpolateTemplate, prisma } from "../serverContext";
 
 export function registerPeopleRoutes(app: Express) {
-// PEOPLE ROUTES
-// ============================================================================
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  // PEOPLE ROUTES
+  // ============================================================================
 
 // Upload CSV
 app.post(
@@ -67,10 +76,27 @@ app.post(
         req.organizationId!
       );
 
+      const headers = CSVValidator.extractHeaders(csvContent);
+      let aiSuggestions: string[] | null = null;
+      if (validation.errors.length > 0) {
+        try {
+          aiSuggestions = await generateCsvSuggestions({
+            headers,
+            errors: validation.errors.map((error) => ({
+              row: error.row,
+              message: error.message,
+            })),
+          });
+        } catch (error) {
+          console.warn("AI CSV suggestion failed:", error);
+        }
+      }
+
       res.json({
         success: true,
         summary: validation.summary,
         errors: validation.errors,
+        aiSuggestions,
         onboarding,
       });
     } catch (err: any) {
@@ -433,15 +459,37 @@ app.post(
       }
       const template = templateAssignment.template;
 
+      let personalizedIntro: string | null = null;
+      try {
+        personalizedIntro = await generatePersonalizedIntro({
+          fullName: person.fullName,
+          firstName: person.firstName,
+          role: person.role,
+          department: person.department,
+          organizationName: org?.name,
+        });
+      } catch (error) {
+        console.warn("AI intro failed:", error);
+      }
+
       const variables = {
         first_name: person.firstName || person.fullName.split(" ")[0],
         full_name: person.fullName,
         organization_name: org?.name || "Your Organization",
         date: new Date().toLocaleDateString(),
+        personalized_intro: personalizedIntro || "",
       };
 
       const subject = interpolateTemplate(template.subject, variables);
-      const content = interpolateTemplate(template.content, variables);
+      let content = interpolateTemplate(template.content, variables);
+
+      if (personalizedIntro && !template.content.includes("{{personalized_intro}}")) {
+        const introText = escapeHtml(personalizedIntro);
+        content =
+          template.type === "HTML"
+            ? `<p>${introText}</p>${content}`
+            : `${personalizedIntro}\n\n${content}`;
+      }
 
       const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
 

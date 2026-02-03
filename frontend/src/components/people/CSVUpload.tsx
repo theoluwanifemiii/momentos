@@ -150,6 +150,18 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
                     </ul>
                   </div>
                 )}
+                {result.aiSuggestions && result.aiSuggestions.length > 0 && (
+                  <div className="mt-4">
+                    <p className="font-medium text-sm mb-2">AI Suggestions:</p>
+                    <ul className="text-sm space-y-1">
+                      {result.aiSuggestions.map((suggestion: string, i: number) => (
+                        <li key={i} className="text-blue-700">
+                          {suggestion}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>
