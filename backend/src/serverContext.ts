@@ -348,6 +348,8 @@ export async function createAdminSession(
     secure: secureCookie,
     maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
   });
+
+  return token;
 }
 
 export async function revokeAdminSession(token?: string) {
@@ -444,7 +446,10 @@ export async function authenticateAdmin(
   next: NextFunction
 ) {
   try {
-    const token = req.cookies?.[ADMIN_SESSION_COOKIE];
+    const headerToken = req.headers["x-admin-session"];
+    const token =
+      req.cookies?.[ADMIN_SESSION_COOKIE] ||
+      (typeof headerToken === "string" ? headerToken : undefined);
     if (!token) {
       return res.status(401).json({ error: "Admin authentication required" });
     }

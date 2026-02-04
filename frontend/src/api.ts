@@ -113,8 +113,10 @@ export const adminApi = {
     };
   },
   async call(endpoint: string, options: RequestInit = {}) {
+    const adminSessionToken = localStorage.getItem("admin_session_token");
     const headers: HeadersInit = {
       "Content-Type": "application/json",
+      ...(adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}),
       ...options.headers,
     };
 

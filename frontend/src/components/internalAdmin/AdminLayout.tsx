@@ -22,6 +22,7 @@ export default function AdminLayout() {
         const data = await adminApi.call("/auth/me");
         setAdmin(data.admin);
       } catch (err: any) {
+        localStorage.removeItem("admin_session_token");
         navigate("/admin/login", { replace: true });
       } finally {
         setLoading(false);
@@ -38,6 +39,7 @@ export default function AdminLayout() {
     setError("");
     try {
       await adminApi.call("/auth/logout", { method: "POST" });
+      localStorage.removeItem("admin_session_token");
       navigate("/admin/login", { replace: true });
     } catch (err: any) {
       setError(err.message || "Logout failed");

@@ -14,10 +14,13 @@ export default function AdminLogin() {
     setError("");
     setLoading(true);
     try {
-      await adminApi.call("/auth/login", {
+      const data = await adminApi.call("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (data?.sessionToken) {
+        localStorage.setItem("admin_session_token", data.sessionToken);
+      }
       navigate("/admin", { replace: true });
     } catch (err: any) {
       setError(err.message || "Login failed");

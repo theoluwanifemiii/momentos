@@ -67,7 +67,12 @@ export function registerAuthRoutes(app: Express) {
         data: { lastLoginAt: new Date() },
       });
 
-      await createAdminSession(admin.id, admin.role as AdminRoleType, req, res);
+      const sessionToken = await createAdminSession(
+        admin.id,
+        admin.role as AdminRoleType,
+        req,
+        res
+      );
 
       res.json({
         admin: {
@@ -75,6 +80,7 @@ export function registerAuthRoutes(app: Express) {
           email: admin.email,
           role: admin.role,
         },
+        sessionToken,
       });
     } catch (err: any) {
       res
@@ -223,7 +229,11 @@ export function registerAuthRoutes(app: Express) {
     authenticateAdmin,
     async (req: AdminAuthRequest, res: Response) => {
       try {
-        await revokeAdminSession(req.cookies?.[ADMIN_SESSION_COOKIE]);
+        const headerToken = req.headers["x-admin-session"];
+        const token =
+          req.cookies?.[ADMIN_SESSION_COOKIE] ||
+          (typeof headerToken === "string" ? headerToken : undefined);
+        await revokeAdminSession(token);
         res.clearCookie(ADMIN_SESSION_COOKIE);
         res.json({ success: true });
       } catch (err: any) {
