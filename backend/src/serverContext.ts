@@ -333,10 +333,18 @@ export async function createAdminSession(
   });
 
   const isProd = process.env.NODE_ENV === "production";
+  const host = String(req.headers.host || "").toLowerCase();
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").toLowerCase();
+  const isLocalHost =
+    host.includes("localhost") ||
+    host.startsWith("127.0.0.1") ||
+    host.startsWith("[::1]");
+  const secureCookie = isProd && !isLocalHost && (req.secure || forwardedProto.includes("https"));
+
   res.cookie(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: isProd ? "none" : "lax",
-    secure: isProd,
+    sameSite: secureCookie ? "none" : "lax",
+    secure: secureCookie,
     maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
   });
 }
