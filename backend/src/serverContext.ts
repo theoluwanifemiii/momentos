@@ -334,12 +334,13 @@ export async function createAdminSession(
 
   const isProd = process.env.NODE_ENV === "production";
   const host = String(req.headers.host || "").toLowerCase();
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").toLowerCase();
   const isLocalHost =
     host.includes("localhost") ||
     host.startsWith("127.0.0.1") ||
     host.startsWith("[::1]");
-  const secureCookie = isProd && !isLocalHost && (req.secure || forwardedProto.includes("https"));
+  // In production, admin auth is usually cross-site (frontend != API host), so enforce
+  // Secure + SameSite=None for any non-local host to keep session cookies attached.
+  const secureCookie = isProd && !isLocalHost;
 
   res.cookie(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
