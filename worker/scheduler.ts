@@ -25,6 +25,14 @@ const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
+type OpenAIChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+};
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, "&amp;")
@@ -75,7 +83,7 @@ Person:
     return null;
   }
 
-  const payload = await response.json();
+  const payload = (await response.json()) as OpenAIChatCompletionResponse;
   const content = payload?.choices?.[0]?.message?.content;
   if (!content) return null;
   try {
