@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { CSVValidator } from "../services/csvValidator";
 import { EmailService } from "../services/emailService";
+import { smsService } from "../services/smsService";
 import { normalizeOptionalPhone } from "../services/phone";
 import { computeOnboardingState } from "../services/onboarding";
 import { PersonUpdateSchema, validateUpdate } from "../middleware/validation";
@@ -17,6 +18,8 @@ export function registerPeopleRoutes(app: Express) {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  const toSmsText = (value: string) =>
+    value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
 
   // PEOPLE ROUTES
   // ============================================================================
@@ -521,6 +524,110 @@ app.post(
       });
 
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: getUserErrorMessage(err) });
+    }
+  }
+);
+
+// Send birthday SMS now (manual trigger per person).
+app.post(
+  "/api/people/:id/send-sms",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const schema = z.object({
+        message: z.string().min(1).max(1000).optional(),
+      });
+      const data = schema.parse(req.body || {});
+
+      const person = await prisma.person.findFirst({
+        where: {
+          id,
+          organizationId: req.organizationId!,
+        },
+      });
+
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+
+      if (person.optedOut) {
+        return res.status(400).json({ error: "Person has opted out" });
+      }
+
+      if (!person.phone) {
+        return res.status(400).json({ error: "Person does not have a phone number" });
+      }
+
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId! },
+      });
+
+      if (!org?.smsEnabled) {
+        return res.status(400).json({ error: "Enable SMS in Settings before sending." });
+      }
+
+      const templateAssignment = await prisma.organizationTemplate.findFirst({
+        where: {
+          organizationId: req.organizationId!,
+          isDefault: true,
+          isActive: true,
+        },
+        include: { template: true },
+      });
+
+      if (!templateAssignment) {
+        return res.status(400).json({ error: "No default template found" });
+      }
+
+      const template = templateAssignment.template;
+      const variables = {
+        first_name: person.firstName || person.fullName.split(" ")[0],
+        full_name: person.fullName,
+        organization_name: org.name || "Your Organization",
+        date: new Date().toLocaleDateString(),
+      };
+
+      const interpolatedContent = interpolateTemplate(template.content, variables);
+      const smsContent = toSmsText(data.message || interpolatedContent);
+
+      if (!smsContent) {
+        return res.status(400).json({ error: "SMS content is empty" });
+      }
+
+      const smsResult = await smsService.send({
+        to: person.phone,
+        message: smsContent,
+        senderId: org.senderId || "MomentOS",
+      });
+
+      await prisma.deliveryLog.create({
+        data: {
+          personId: person.id,
+          templateId: template.id,
+          organizationId: req.organizationId!,
+          channel: "sms",
+          status: smsResult.success ? "DELIVERED" : "FAILED",
+          scheduledFor: new Date(),
+          sentAt: smsResult.success ? new Date() : null,
+          deliveredAt: smsResult.success ? new Date() : null,
+          externalId: smsResult.messageId,
+          errorMessage: smsResult.error,
+        },
+      });
+
+      if (!smsResult.success) {
+        return res.status(502).json({
+          error: smsResult.error || "SMS failed to send",
+        });
+      }
+
+      res.json({
+        success: true,
+        messageId: smsResult.messageId,
+      });
     } catch (err: any) {
       res.status(500).json({ error: getUserErrorMessage(err) });
     }

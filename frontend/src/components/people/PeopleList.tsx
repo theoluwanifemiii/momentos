@@ -20,7 +20,7 @@ export default function PeopleList({
 }: PeopleListProps) {
   const [people, setPeople] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sendingAction, setSendingAction] = useState<string | null>(null);
   const [sendMessage, setSendMessage] = useState('');
   const [listError, setListError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -57,14 +57,27 @@ export default function PeopleList({
 
   const handleSendBirthday = async (personId: string) => {
     setSendMessage('');
-    setSendingId(personId);
+    setSendingAction(`${personId}:email`);
     try {
       await api.call(`/people/${personId}/send-birthday`, { method: 'POST' });
       setSendMessage('Birthday email sent.');
     } catch (err: any) {
       setSendMessage(err.message);
     } finally {
-      setSendingId(null);
+      setSendingAction(null);
+    }
+  };
+
+  const handleSendSms = async (personId: string) => {
+    setSendMessage('');
+    setSendingAction(`${personId}:sms`);
+    try {
+      await api.call(`/people/${personId}/send-sms`, { method: 'POST', body: JSON.stringify({}) });
+      setSendMessage('Birthday SMS sent.');
+    } catch (err: any) {
+      setSendMessage(err.message);
+    } finally {
+      setSendingAction(null);
     }
   };
 
@@ -427,13 +440,26 @@ export default function PeopleList({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {allowManualSend ? (
-                    <button
-                      onClick={() => handleSendBirthday(person.id)}
-                      disabled={sendingId === person.id}
-                      className="text-blue-600 hover:underline disabled:opacity-50"
-                    >
-                      {sendingId === person.id ? 'Sending...' : 'Send Birthday Email Now'}
-                    </button>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => handleSendBirthday(person.id)}
+                        disabled={sendingAction === `${person.id}:email`}
+                        className="text-blue-600 hover:underline disabled:opacity-50 text-left"
+                      >
+                        {sendingAction === `${person.id}:email`
+                          ? 'Sending Email...'
+                          : 'Send Birthday Email Now'}
+                      </button>
+                      <button
+                        onClick={() => handleSendSms(person.id)}
+                        disabled={!person.phone || sendingAction === `${person.id}:sms`}
+                        className="text-blue-600 hover:underline disabled:opacity-50 disabled:text-gray-400 text-left"
+                      >
+                        {sendingAction === `${person.id}:sms`
+                          ? 'Sending SMS...'
+                          : 'Send Birthday SMS Now'}
+                      </button>
+                    </div>
                   ) : (
                     <span className="text-xs text-gray-400">Unlock after first send</span>
                   )}
