@@ -13,7 +13,8 @@ type RateLimitBucket = {
   resetAt: number;
 };
 
-const LOCALHOST_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const LOCALHOST_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
 const normalizeOrigin = (value: string) => {
   try {
@@ -50,6 +51,8 @@ export const buildAllowedOrigins = () => {
     normalized.add("http://127.0.0.1:4173");
     normalized.add("http://localhost:3000");
     normalized.add("http://127.0.0.1:3000");
+    normalized.add("https://www.usemomentos.xyz");
+    normalized.add("https://usemomentos.xyz");
   }
 
   return normalized;
@@ -69,7 +72,10 @@ export const isTrustedOrigin = (
   if (allowlist.has(normalized)) {
     return true;
   }
-  if (process.env.NODE_ENV !== "production" && LOCALHOST_ORIGIN.test(normalized)) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    LOCALHOST_ORIGIN.test(normalized)
+  ) {
     return true;
   }
   return false;
