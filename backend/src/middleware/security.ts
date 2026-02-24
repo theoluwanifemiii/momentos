@@ -13,8 +13,7 @@ type RateLimitBucket = {
   resetAt: number;
 };
 
-const LOCALHOST_ORIGIN =
-  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const LOCALHOST_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
 const normalizeOrigin = (value: string) => {
   try {
@@ -25,22 +24,55 @@ const normalizeOrigin = (value: string) => {
   }
 };
 
+const splitOriginEntries = (value?: string) =>
+  (value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const addOriginWithVariants = (origin: string, target: Set<string>) => {
+  target.add(origin);
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.toLowerCase();
+    const labels = host.split(".");
+    if (LOCALHOST_ORIGIN.test(origin)) {
+      return;
+    }
+
+    if (labels.length === 2 && !host.startsWith("www.")) {
+      parsed.hostname = `www.${host}`;
+      target.add(`${parsed.protocol}//${parsed.host}`.toLowerCase());
+      return;
+    }
+
+    if (labels.length === 3 && host.startsWith("www.")) {
+      parsed.hostname = host.slice(4);
+      target.add(`${parsed.protocol}//${parsed.host}`.toLowerCase());
+    }
+  } catch {
+    // Ignore malformed URLs here; caller already normalized.
+  }
+};
+
 export const buildAllowedOrigins = () => {
-  const raw = [
-    process.env.APP_URL,
-    process.env.FRONTEND_URL,
-    process.env.ADMIN_APP_URL,
-    ...(process.env.CORS_ALLOWLIST || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean),
-  ].filter(Boolean) as string[];
+  const envOrigins = [
+    ...splitOriginEntries(process.env.APP_URL),
+    ...splitOriginEntries(process.env.FRONTEND_URL),
+    ...splitOriginEntries(process.env.ADMIN_APP_URL),
+    ...splitOriginEntries(process.env.CORS_ALLOWLIST),
+  ];
+
+  const raw =
+    process.env.NODE_ENV === "production"
+      ? [...envOrigins, ...DEFAULT_PRODUCTION_ORIGINS]
+      : envOrigins;
 
   const normalized = new Set<string>();
   for (const value of raw) {
     const origin = normalizeOrigin(value);
     if (origin) {
-      normalized.add(origin);
+      addOriginWithVariants(origin, normalized);
     }
   }
 

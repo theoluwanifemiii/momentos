@@ -4,14 +4,27 @@ interface SMSParams {
   senderId?: string;
 }
 
+type SmsProviderResponse = {
+  code?: string;
+  message?: string;
+  message_id?: string;
+  [key: string]: unknown;
+};
+
 export class SMSService {
   private apiKey: string;
   private baseUrl = 'https://v3.api.termii.com/api';
   private testMode: boolean;
+  private defaultSenderId: string;
+  private channel: string;
+  private notifyUrl?: string;
 
   constructor() {
     this.apiKey = process.env.TERMII_API_KEY || '';
     this.testMode = this.isTestModeEnabled();
+    this.defaultSenderId = (process.env.TERMII_SMS_FROM || 'MomentOS').trim();
+    this.channel = (process.env.TERMII_SMS_CHANNEL || 'generic').trim() || 'generic';
+    this.notifyUrl = (process.env.TERMII_SMS_NOTIFY_URL || '').trim() || undefined;
 
     if (!this.apiKey) {
       console.warn('⚠️ TERMII_API_KEY not set. SMS will not work.');
@@ -38,24 +51,33 @@ export class SMSService {
 
     try {
       const phone = this.formatPhoneNumber(params.to);
+      const from = this.resolveSenderId(params.senderId);
+
+      const payload: Record<string, unknown> = {
+        to: phone,
+        from,
+        sms: params.message,
+        type: 'plain',
+        channel: this.channel,
+        api_key: this.apiKey,
+      };
+      if (this.notifyUrl) {
+        payload.notify_url = this.notifyUrl;
+      }
+
       const response = await fetch(`${this.baseUrl}/sms/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: phone,
-          from: params.senderId || 'MomentOS',
-          sms: params.message,
-          type: 'plain',
-          channel: 'generic',
-          api_key: this.apiKey,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const text = await response.text();
-      const data = text ? (JSON.parse(text) as any) : {};
+      const data = text ? (JSON.parse(text) as SmsProviderResponse) : {};
+      const providerCode = `${data.code || ''}`.toLowerCase();
+      const accepted = providerCode === 'ok' || Boolean(data.message_id);
 
-      if (data.code === 'ok') {
-        console.log(`✅ SMS sent to ${phone}: ${data.message_id}`);
+      if (accepted) {
+        console.log(`✅ SMS accepted by provider for ${phone}: ${data.message_id || 'no-id'}`);
         return {
           success: true,
           messageId: data.message_id,
@@ -126,6 +148,14 @@ export class SMSService {
   private isTestModeEnabled() {
     const raw = (process.env.SMS_TEST_MODE || '').toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'yes';
+  }
+
+  private resolveSenderId(candidate?: string) {
+    const value = (candidate || '').trim();
+    if (value) {
+      return value.slice(0, 11);
+    }
+    return this.defaultSenderId.slice(0, 11);
   }
 }
 

@@ -35,8 +35,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://momentos:momentos_password_change_me@postgres:5432/momentos
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      DATABASE_URL: postgresql://postgres:FNdqeqmEuNaTTqFlUGeOmSsmfVShvEKs@postgres.railway.internal:5432/railway
+      JWT_SECRET: 945fa5c5afdf30468a0424c7cddf3a8e548fd137667960582e8426702c2cb673
+
       PORT: 3001
       NODE_ENV: production
     ports:
@@ -57,7 +58,7 @@ services:
       - backend
       - postgres
     environment:
-      DATABASE_URL: postgresql://momentos:momentos_password_change_me@postgres:5432/momentos
+      DATABASE_URL: postgresql://postgres:FNdqeqmEuNaTTqFlUGeOmSsmfVShvEKs@postgres.railway.internal:5432/railway
       NODE_ENV: production
     volumes:
       - ./worker:/app

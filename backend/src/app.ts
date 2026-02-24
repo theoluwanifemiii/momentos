@@ -19,14 +19,36 @@ import { registerInternalAdminRoutes } from "./routes/InternalAdmin";
 import { registerAdminDashboardRoutes } from "./routes/AdminDashboard";
 import { registerAiRoutes } from "./routes/AI";
 import { registerMomentsRoutes } from "./routes/Moments";
+import { registerWebhookRoutes } from "./routes/Webhooks";
 
 const app = express();
 app.set("trust proxy", 1);
 
 const allowedOrigins = buildAllowedOrigins();
+if (process.env.NODE_ENV === "production") {
+  const hasNonLocalOrigin = [...allowedOrigins].some(
+    (origin) =>
+      !origin.includes("localhost") &&
+      !origin.includes("127.0.0.1") &&
+      !origin.includes("[::1]")
+  );
+  if (!hasNonLocalOrigin) {
+    console.warn(
+      "[security] No non-local allowed origins detected. Set APP_URL/FRONTEND_URL/CORS_ALLOWLIST for production."
+    );
+  }
+}
 const corsDelegate: cors.CorsOptionsDelegate<Request> = (req, callback) => {
   const requestOrigin = req.headers.origin;
-  if (isTrustedOrigin(requestOrigin, allowedOrigins)) {
+  const isAdminRoute = req.path.startsWith("/api/internal/admin");
+  const hasHttpsOrigin =
+    typeof requestOrigin === "string" &&
+    requestOrigin.toLowerCase().startsWith("https://");
+  const shouldAllowOrigin =
+    isTrustedOrigin(requestOrigin, allowedOrigins) ||
+    (!isAdminRoute && process.env.NODE_ENV === "production" && hasHttpsOrigin);
+
+  if (shouldAllowOrigin) {
     return callback(null, {
       origin: requestOrigin,
       credentials: true,
@@ -72,5 +94,6 @@ registerOnboardingRoutes(app);
 registerInternalAdminRoutes(app);
 registerAdminDashboardRoutes(app);
 registerAiRoutes(app);
+registerWebhookRoutes(app);
 
 export default app;

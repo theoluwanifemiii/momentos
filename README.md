@@ -194,6 +194,8 @@ Note: WhatsApp as a birthday delivery channel is now supported in V1; broader Wh
 	3. Confirm environment variables:
 		•	`DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`
 		•	`TERMII_API_KEY`, `SMS_TEST_MODE` (optional), `WHATSAPP_TEST_MODE` (optional)
+		•	`TERMII_SMS_FROM` (approved sender ID), `TERMII_SMS_CHANNEL` (for example `generic` or `dnd`)
+		•	`TERMII_SMS_NOTIFY_URL` and `TERMII_WEBHOOK_TOKEN` for SMS delivery-status callbacks
 		•	`DEFAULT_FROM_EMAIL`, `NOTIFICATIONS_FROM_EMAIL`
 	4. Restart backend, frontend, and worker services.
 	5. Run smoke tests:

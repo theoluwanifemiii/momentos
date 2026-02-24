@@ -6,14 +6,27 @@ interface SMSParams {
   senderId?: string;
 }
 
+type SmsProviderResponse = {
+  code?: string;
+  message?: string;
+  message_id?: string;
+  [key: string]: unknown;
+};
+
 export class SMSService {
   private apiKey: string;
   private baseUrl = 'https://v3.api.termii.com/api';
   private testMode: boolean;
+  private defaultSenderId: string;
+  private channel: string;
+  private notifyUrl?: string;
 
   constructor() {
     this.apiKey = process.env.TERMII_API_KEY || '';
     this.testMode = this.isTestModeEnabled();
+    this.defaultSenderId = (process.env.TERMII_SMS_FROM || 'MomentOS').trim();
+    this.channel = (process.env.TERMII_SMS_CHANNEL || 'generic').trim() || 'generic';
+    this.notifyUrl = (process.env.TERMII_SMS_NOTIFY_URL || '').trim() || undefined;
 
     if (!this.apiKey) {
       console.warn('⚠️ TERMII_API_KEY not set. SMS will not work.');
@@ -43,28 +56,37 @@ export class SMSService {
 
     try {
       const phone = this.formatPhoneNumber(params.to);
+      const from = this.resolveSenderId(params.senderId);
 
-      const response = await axios.post(`${this.baseUrl}/sms/send`, {
+      const payload: Record<string, unknown> = {
         to: phone,
-        from: params.senderId || 'MomentOS',
+        from,
         sms: params.message,
         type: 'plain',
-        channel: 'generic',
+        channel: this.channel,
         api_key: this.apiKey,
-      });
+      };
+      if (this.notifyUrl) {
+        payload.notify_url = this.notifyUrl;
+      }
 
-      if (response.data.code === 'ok') {
-        console.log(`✅ SMS sent to ${phone}: ${response.data.message_id}`);
+      const response = await axios.post(`${this.baseUrl}/sms/send`, payload);
+      const data = (response.data || {}) as SmsProviderResponse;
+      const providerCode = `${data.code || ''}`.toLowerCase();
+      const accepted = providerCode === 'ok' || Boolean(data.message_id);
+
+      if (accepted) {
+        console.log(`✅ SMS accepted by provider for ${phone}: ${data.message_id || 'no-id'}`);
         return {
           success: true,
-          messageId: response.data.message_id,
+          messageId: data.message_id,
         };
       }
 
-      console.error(`❌ SMS failed: ${response.data.message}`);
+      console.error(`❌ SMS failed: ${data.message || JSON.stringify(data)}`);
       return {
         success: false,
-        error: response.data.message,
+        error: data.message || 'SMS provider returned an unsuccessful response',
       };
     } catch (error: any) {
       const errorDetail =
@@ -169,6 +191,14 @@ export class SMSService {
   private isTestModeEnabled() {
     const raw = (process.env.SMS_TEST_MODE || '').toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'yes';
+  }
+
+  private resolveSenderId(candidate?: string) {
+    const value = (candidate || '').trim();
+    if (value) {
+      return value.slice(0, 11);
+    }
+    return this.defaultSenderId.slice(0, 11);
   }
 }
 

@@ -834,7 +834,7 @@ From everyone at {{organization_name}}`,
         organizationId: org.id,
         momentId,
         channel: DeliveryChannel.sms,
-        status: smsResult.success ? DeliveryStatus.DELIVERED : DeliveryStatus.FAILED,
+        status: smsResult.success ? DeliveryStatus.SENT : DeliveryStatus.FAILED,
         externalId: smsResult.messageId,
         errorMessage: smsResult.error,
       });
