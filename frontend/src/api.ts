@@ -1,11 +1,33 @@
 const ENV_API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_REMOTE_API_URL = "https://momentos-production.up.railway.app/api";
 const DEFAULT_LOCAL_API_URL = "http://localhost:3001/api";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const normalizeApiUrl = (value?: string) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const targetIsLocal = LOCAL_HOSTS.has(parsed.hostname);
+    const appIsLocal =
+      typeof window !== "undefined" && LOCAL_HOSTS.has(window.location.hostname);
+
+    // Prevent production/staging clients from attempting to call localhost.
+    if (targetIsLocal && !appIsLocal) {
+      return null;
+    }
+
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+  } catch {
+    return trimmed.replace(/\/$/, "");
+  }
+};
+
 const FALLBACK_API_URL =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
+  typeof window !== "undefined" && LOCAL_HOSTS.has(window.location.hostname)
     ? DEFAULT_LOCAL_API_URL
     : DEFAULT_REMOTE_API_URL;
-export const API_URL = ENV_API_URL || FALLBACK_API_URL;
+export const API_URL = normalizeApiUrl(ENV_API_URL) || FALLBACK_API_URL;
 
 const buildFriendlyError = (
   payload: any,

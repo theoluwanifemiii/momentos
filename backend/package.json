@@ -6,7 +6,8 @@
     "build": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma && tsc",
     "start": "node dist/index.js",
     "postinstall": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "db:sync-check": "node --import tsx scripts/checkDbSync.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",
