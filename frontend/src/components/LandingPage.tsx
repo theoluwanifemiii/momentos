@@ -1219,7 +1219,7 @@ const landingMarkup = `
           </span>
           <div class="max-w-2xl">
             <h2 class="text-3xl sm:text-5xl font-semibold text-slate-900 tracking-tight">One-click birthday automation</h2>
-            <p class="mt-4 text-lg text-slate-600">Connect your data once and let MomentOS deliver thoughtful messages automatically — on time, every time.</p>
+            <p class="mt-4 text-lg text-slate-600">Connect your data once and let MomentOS deliver thoughtful messages automatically: on time, every time.</p>
           </div>
           <div class="flex flex-col sm:flex-row gap-3">
             <a href="#" data-action="open-waitlist" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-7 py-3 text-sm font-semibold text-white">

@@ -1,10 +1,10 @@
-interface SMSParams {
+interface WhatsAppParams {
   to: string;
   message: string;
-  senderId?: string;
+  from?: string;
 }
 
-export class SMSService {
+export class WhatsAppService {
   private apiKey: string;
   private baseUrl = 'https://v3.api.termii.com/api';
   private testMode: boolean;
@@ -14,22 +14,22 @@ export class SMSService {
     this.testMode = this.isTestModeEnabled();
 
     if (!this.apiKey) {
-      console.warn('⚠️ TERMII_API_KEY not set. SMS will not work.');
+      console.warn('⚠️ TERMII_API_KEY not set. WhatsApp will not work.');
     }
     if (this.testMode) {
-      console.warn('⚠️ SMS_TEST_MODE enabled. SMS will be mocked.');
+      console.warn('⚠️ WHATSAPP_TEST_MODE enabled. WhatsApp will be mocked.');
     }
   }
 
-  async send(params: SMSParams): Promise<{
+  async send(params: WhatsAppParams): Promise<{
     success: boolean;
     messageId?: string;
     error?: string;
   }> {
     if (this.testMode) {
       const phone = this.formatPhoneNumber(params.to);
-      const messageId = `mock-${Date.now()}`;
-      console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
+      const messageId = `mock-whatsapp-${Date.now()}`;
+      console.log(`✅ [MOCK] WhatsApp sent to ${phone}: ${messageId}`);
       return { success: true, messageId };
     }
     if (!this.apiKey) {
@@ -43,10 +43,10 @@ export class SMSService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: phone,
-          from: params.senderId || 'MomentOS',
+          from: params.from || process.env.TERMII_WHATSAPP_FROM || 'MomentOS',
           sms: params.message,
           type: 'plain',
-          channel: 'generic',
+          channel: 'whatsapp',
           api_key: this.apiKey,
         }),
       });
@@ -55,20 +55,18 @@ export class SMSService {
       const data = text ? (JSON.parse(text) as any) : {};
 
       if (data.code === 'ok') {
-        console.log(`✅ SMS sent to ${phone}: ${data.message_id}`);
+        console.log(`✅ WhatsApp sent to ${phone}: ${data.message_id}`);
         return {
           success: true,
           messageId: data.message_id,
         };
       }
 
-      console.error(`❌ SMS failed: ${data.message || text || response.status}`);
       return {
         success: false,
         error: data.message || text || `Request failed with status ${response.status}`,
       };
     } catch (error: any) {
-      console.error('SMS Service Error:', error.message);
       return {
         success: false,
         error: error.message,
@@ -124,9 +122,13 @@ export class SMSService {
   }
 
   private isTestModeEnabled() {
-    const raw = (process.env.SMS_TEST_MODE || '').toLowerCase();
+    const raw = (
+      process.env.WHATSAPP_TEST_MODE ||
+      process.env.SMS_TEST_MODE ||
+      ''
+    ).toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'yes';
   }
 }
 
-export const smsService = new SMSService();
+export const whatsappService = new WhatsAppService();

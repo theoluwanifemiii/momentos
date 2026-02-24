@@ -2,7 +2,28 @@ import { Express, Request, Response } from "express";
 import { z } from "zod";
 import { Prisma, DeliveryStatus } from "@prisma/client";
 import { EmailService } from "../services/emailService";
-import { ADMIN_INVITE_FROM_EMAIL, ADMIN_INVITE_FROM_NAME, ADMIN_APP_URL, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, WAITLIST_REPLY_TO, adminCache, clearAdminCache, createAdminInvite, getNextBirthdayOccurrence, getOrgDateTime, getUserErrorMessage, interpolateTemplate, logAdminAction, prisma, requireSuperAdmin, authenticateAdmin, AdminAuthRequest, ADMIN_EMAIL_DOMAIN } from "../serverContext";
+import {
+  ADMIN_INVITE_FROM_EMAIL,
+  ADMIN_INVITE_FROM_NAME,
+  ADMIN_APP_URL,
+  DEFAULT_FROM_EMAIL,
+  DEFAULT_FROM_NAME,
+  WAITLIST_REPLY_TO,
+  adminCache,
+  clearAdminCache,
+  createAdminInvite,
+  getNextBirthdayOccurrence,
+  getOrgDateTime,
+  getUserErrorMessage,
+  interpolateTemplate,
+  logAdminAction,
+  prisma,
+  requireSuperAdmin,
+  authenticateAdmin,
+  AdminAuthRequest,
+  ADMIN_EMAIL_DOMAIN,
+  resolveFromEmail,
+} from "../serverContext";
 
 export function registerInternalAdminRoutes(app: Express) {
 // INTERNAL ADMIN ROUTES (MomentOS staff only)
@@ -533,7 +554,9 @@ app.post(
       };
       const subject = interpolateTemplate(template.subject, variables);
       const content = interpolateTemplate(template.content, variables);
-      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+      const fromEmail = resolveFromEmail(
+        org?.emailFromAddress || DEFAULT_FROM_EMAIL
+      );
       if (!fromEmail) {
         return res.status(400).json({ error: "Sender email not configured" });
       }

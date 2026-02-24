@@ -1,0 +1,2 @@
+ALTER TABLE "organizations"
+ADD COLUMN IF NOT EXISTS "whatsappEnabled" BOOLEAN NOT NULL DEFAULT false;

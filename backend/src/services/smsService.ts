@@ -81,34 +81,71 @@ export class SMSService {
   }
 
   /**
-   * Format phone number to international format
-   * Supports: 08012345678, 2348012345678, +2348012345678
+   * Format phone number for Termii.
+   * Supports E.164-style inputs (+14155552671, +447700900123, +2348012345678)
+   * and local numbers with DEFAULT_PHONE_COUNTRY_CODE fallback.
    */
   private formatPhoneNumber(phone: string): string {
-    let cleaned = phone.replace(/\D/g, '');
-
-    if (cleaned.startsWith('0')) {
-      cleaned = '234' + cleaned.substring(1);
-    } else if (cleaned.startsWith('234')) {
-      // already correct
-    } else if (cleaned.length === 10) {
-      cleaned = '234' + cleaned;
+    const trimmed = phone.trim();
+    if (!trimmed) {
+      throw new Error('Phone number is required');
     }
 
-    return cleaned;
+    let cleaned = trimmed.replace(/[^\d+]/g, '');
+    if (cleaned.startsWith('00')) {
+      cleaned = `+${cleaned.slice(2)}`;
+    }
+
+    if (cleaned.startsWith('+')) {
+      const digits = cleaned.slice(1).replace(/\D/g, '');
+      if (!digits) {
+        throw new Error('Invalid phone number');
+      }
+      return digits;
+    }
+
+    const digits = cleaned.replace(/\D/g, '');
+    if (!digits) {
+      throw new Error('Invalid phone number');
+    }
+
+    const defaultCountryCode = (process.env.DEFAULT_PHONE_COUNTRY_CODE || '')
+      .replace(/\D/g, '');
+
+    if (digits.startsWith('0')) {
+      if (defaultCountryCode) {
+        return `${defaultCountryCode}${digits.slice(1)}`;
+      }
+      if (digits.length === 11) {
+        return `234${digits.slice(1)}`;
+      }
+    }
+
+    if (digits.length === 10) {
+      return `${defaultCountryCode || '234'}${digits}`;
+    }
+
+    if (digits.length >= 10 && digits.length <= 15) {
+      return digits;
+    }
+
+    throw new Error('Phone number must include country code');
   }
 
   /**
    * Validate phone number format
    */
   static isValidNigerianPhone(phone: string): boolean {
-    const cleaned = phone.replace(/\D/g, '');
+    const cleaned = phone.replace(/[^\d+]/g, '');
+    if (!cleaned) return false;
 
-    if (cleaned.startsWith('0') && cleaned.length === 11) return true;
-    if (cleaned.startsWith('234') && cleaned.length === 13) return true;
-    if (cleaned.length === 10) return true;
+    if (cleaned.startsWith('+')) {
+      const digits = cleaned.slice(1).replace(/\D/g, '');
+      return digits.length >= 10 && digits.length <= 15;
+    }
 
-    return false;
+    const digits = cleaned.replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 15;
   }
 
   /**

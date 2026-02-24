@@ -1,29 +1,64 @@
-// Birthday Scheduler Worker
-// File: worker/scheduler.ts
-// Runs daily to check for birthdays and send emails.
-// Automated Daily Scheduler:
-// - Runs every day at 9:00 AM (org timezone)
-// - Checks for today's birthdays
-// - Sends birthday emails automatically
-// - Sends admin notifications 2 days before
-// - Logs all deliveries
-
 import 'dotenv/config';
 
-import { PrismaClient, TemplateType } from '@prisma/client';
+import {
+  DeliveryChannel,
+  DeliveryStatus,
+  Prisma,
+  PrismaClient,
+  TemplateType,
+} from '@prisma/client';
 import { DateTime } from 'luxon';
 import cron from 'node-cron';
 import { Resend } from 'resend';
 import { smsService } from './smsService';
+import { whatsappService } from './whatsappService';
 
 const prisma = new PrismaClient();
+
 const DEFAULT_FROM_EMAIL =
-  process.env.DEFAULT_FROM_EMAIL || "birthday@mail.usemomentos.xyz";
+  process.env.DEFAULT_FROM_EMAIL || 'birthday@mail.usemomentos.xyz';
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 const NOTIFICATIONS_FROM_EMAIL = process.env.NOTIFICATIONS_FROM_EMAIL;
 const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const extractDomain = (value?: string | null) => {
+  if (!value) return null;
+  const atIndex = value.lastIndexOf('@');
+  if (atIndex === -1) return null;
+  return value.slice(atIndex + 1).trim().toLowerCase();
+};
+const RESEND_ALLOWED_DOMAINS = (
+  process.env.RESEND_ALLOWED_DOMAINS || extractDomain(DEFAULT_FROM_EMAIL) || ''
+)
+  .split(',')
+  .map((domain) => domain.trim().toLowerCase())
+  .filter(Boolean);
+const HAS_DOMAIN_ALLOWLIST = RESEND_ALLOWED_DOMAINS.length > 0;
+const isAllowedSender = (email?: string | null) => {
+  if (!email) return false;
+  if (!HAS_DOMAIN_ALLOWLIST) return true;
+  const domain = extractDomain(email);
+  return domain ? RESEND_ALLOWED_DOMAINS.includes(domain) : false;
+};
+const resolveFromEmail = (candidate?: string | null) => {
+  const trimmed = candidate?.trim();
+  if (trimmed && isAllowedSender(trimmed)) return trimmed;
+  if (DEFAULT_FROM_EMAIL && isAllowedSender(DEFAULT_FROM_EMAIL)) {
+    return DEFAULT_FROM_EMAIL;
+  }
+  if (RESEND_ALLOWED_DOMAINS.length > 0) {
+    return `noreply@${RESEND_ALLOWED_DOMAINS[0]}`;
+  }
+  return trimmed || DEFAULT_FROM_EMAIL || null;
+};
+
+const DEDUPE_STATUSES: DeliveryStatus[] = [
+  DeliveryStatus.QUEUED,
+  DeliveryStatus.SENDING,
+  DeliveryStatus.SENT,
+  DeliveryStatus.DELIVERED,
+];
 
 type OpenAIChatCompletionResponse = {
   choices?: Array<{
@@ -33,13 +68,49 @@ type OpenAIChatCompletionResponse = {
   }>;
 };
 
+type OrganizationForProcessing = Prisma.OrganizationGetPayload<{
+  include: {
+    people: {
+      where: { optedOut: false };
+    };
+    templateAssignments: {
+      where: { isActive: true };
+      include: { template: true };
+    };
+    users: {
+      select: { email: true };
+    };
+  };
+}>;
+
+type TemplateAssignmentWithTemplate =
+  OrganizationForProcessing['templateAssignments'][number];
+type PersonRecord = OrganizationForProcessing['people'][number];
+type OrganizationDeliveryConfig = Pick<
+  OrganizationForProcessing,
+  | 'id'
+  | 'name'
+  | 'emailFromName'
+  | 'emailFromAddress'
+  | 'senderId'
+  | 'smsEnabled'
+  | 'whatsappEnabled'
+>;
+type OrganizationNotificationConfig = Pick<
+  OrganizationForProcessing,
+  'name' | 'emailFromAddress' | 'users'
+>;
+
 const escapeHtml = (value: string) =>
   value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const toPlainText = (value: string, maxLength: number) =>
+  value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 
 const generatePersonalizedIntro = async (input: {
   fullName: string;
@@ -49,33 +120,37 @@ const generatePersonalizedIntro = async (input: {
   organizationName?: string | null;
 }) => {
   if (!OPENAI_API_KEY) return null;
+
   const prompt = `
 Write one short, friendly sentence to personalize a birthday email intro.
 Use the person's role/department if provided. Do not include emojis.
 Return JSON as {"intro": "..."}.
 Person:
 - Full name: ${input.fullName}
-- First name: ${input.firstName || ""}
-- Role: ${input.role || ""}
-- Department: ${input.department || ""}
-- Organization: ${input.organizationName || ""}
+- First name: ${input.firstName || ''}
+- Role: ${input.role || ''}
+- Department: ${input.department || ''}
+- Organization: ${input.organizationName || ''}
 `;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
       messages: [
-        { role: "system", content: "You write short, tasteful personalization lines." },
-        { role: "user", content: prompt },
+        {
+          role: 'system',
+          content: 'You write short, tasteful personalization lines.',
+        },
+        { role: 'user', content: prompt },
       ],
       temperature: 0.3,
       max_tokens: 200,
-      response_format: { type: "json_object" },
+      response_format: { type: 'json_object' },
     }),
   });
 
@@ -86,16 +161,15 @@ Person:
   const payload = (await response.json()) as OpenAIChatCompletionResponse;
   const content = payload?.choices?.[0]?.message?.content;
   if (!content) return null;
+
   try {
-    const data = JSON.parse(content);
-    if (!data?.intro) return null;
-    return String(data.intro).trim();
+    const parsed = JSON.parse(content) as { intro?: string };
+    return parsed.intro ? String(parsed.intro).trim() : null;
   } catch {
     return null;
   }
 };
 
-// Email provider interface (to be implemented)
 interface EmailProvider {
   send(params: {
     to: string;
@@ -120,7 +194,6 @@ class ResendEmailProvider implements EmailProvider {
     text?: string;
     from: { name: string; email: string };
   }) {
-    // Sends via Resend using org-configured sender info.
     const result = await this.resend.emails.send({
       from: `${params.from.name} <${params.from.email}>`,
       to: params.to,
@@ -137,9 +210,6 @@ class ResendEmailProvider implements EmailProvider {
   }
 }
 
-/**
- * Main Scheduler Class
- */
 class BirthdayScheduler {
   private emailProvider: EmailProvider;
 
@@ -147,10 +217,7 @@ class BirthdayScheduler {
     this.emailProvider = emailProvider;
   }
 
-  /**
-   * Check if today is someone's birthday
-   */
-  private getOrgNow(timezone: string) {
+  private getOrgNow(timezone?: string | null) {
     const zone = timezone || 'UTC';
     const orgNow = DateTime.now().setZone(zone);
     if (!orgNow.isValid) {
@@ -159,17 +226,15 @@ class BirthdayScheduler {
     return orgNow;
   }
 
-  private isBirthdayToday(birthday: Date, timezone: string): boolean {
+  private isBirthdayToday(birthday: Date, timezone?: string | null): boolean {
     const orgNow = this.getOrgNow(timezone);
     const bday = DateTime.fromJSDate(birthday, { zone: orgNow.zone });
 
-    // Handle Feb 29 in non-leap years
     if (bday.month === 2 && bday.day === 29) {
       const isLeapYear = (year: number) =>
         (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 
       if (!isLeapYear(orgNow.year)) {
-        // Celebrate on Feb 28 in non-leap years
         return orgNow.month === 2 && orgNow.day === 28;
       }
     }
@@ -177,17 +242,10 @@ class BirthdayScheduler {
     return orgNow.month === bday.month && orgNow.day === bday.day;
   }
 
-  /**
-   * Get upcoming birthdays (for admin notifications)
-   */
-  private getUpcomingBirthdays(
-    daysAhead: number,
-    timezone: string
-  ): (birthday: Date) => boolean {
+  private getUpcomingBirthdays(daysAhead: number, timezone?: string | null) {
     return (birthday: Date) => {
       const orgNow = this.getOrgNow(timezone);
       const futureDate = orgNow.plus({ days: daysAhead });
-
       const bday = DateTime.fromJSDate(birthday, { zone: orgNow.zone });
       const thisYearBirthday = bday.set({ year: orgNow.year });
 
@@ -198,9 +256,477 @@ class BirthdayScheduler {
     };
   }
 
-  /**
-   * Process birthdays for a single organization
-   */
+  private async logDelivery(params: {
+    personId: string;
+    templateId: string;
+    organizationId: string;
+    channel: DeliveryChannel;
+    status: DeliveryStatus;
+    externalId?: string | null;
+    errorMessage?: string | null;
+  }) {
+    const now = new Date();
+    const success = params.status === DeliveryStatus.SENT ||
+      params.status === DeliveryStatus.DELIVERED;
+
+    await prisma.deliveryLog.create({
+      data: {
+        personId: params.personId,
+        templateId: params.templateId,
+        organizationId: params.organizationId,
+        channel: params.channel,
+        status: params.status,
+        scheduledFor: now,
+        sentAt: success ? now : null,
+        deliveredAt: params.status === DeliveryStatus.DELIVERED ? now : null,
+        externalId: params.externalId || null,
+        errorMessage: params.errorMessage || null,
+      },
+    });
+  }
+
+  private async alreadySentToday(params: {
+    organizationId: string;
+    personId: string;
+    channel: DeliveryChannel;
+    orgNow: DateTime;
+  }) {
+    const dayStartUtc = params.orgNow.startOf('day').toUTC().toJSDate();
+    const dayEndUtc = params.orgNow.endOf('day').toUTC().toJSDate();
+
+    const existing = await prisma.deliveryLog.findFirst({
+      where: {
+        organizationId: params.organizationId,
+        personId: params.personId,
+        channel: params.channel,
+        status: { in: DEDUPE_STATUSES },
+        scheduledFor: {
+          gte: dayStartUtc,
+          lte: dayEndUtc,
+        },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
+  }
+
+  private interpolateTemplate(template: string, variables: Record<string, string>) {
+    let result = template;
+    for (const [key, value] of Object.entries(variables)) {
+      result = result.replace(new RegExp(`{{${key}}}`, 'g'), value);
+    }
+    return result;
+  }
+
+  private async ensureDefaultAssignment(
+    organizationId: string,
+    assignments: TemplateAssignmentWithTemplate[]
+  ) {
+    if (assignments.length === 0) {
+      return assignments;
+    }
+
+    const defaults = assignments.filter((assignment) => assignment.isDefault);
+    if (defaults.length === 1) {
+      return assignments;
+    }
+
+    const preferred = defaults[0] || assignments[0];
+
+    await prisma.$transaction([
+      prisma.organizationTemplate.updateMany({
+        where: { organizationId, isDefault: true, id: { not: preferred.id } },
+        data: { isDefault: false },
+      }),
+      prisma.organizationTemplate.update({
+        where: { id: preferred.id },
+        data: { isDefault: true, isActive: true },
+      }),
+    ]);
+
+    return assignments.map((assignment) => ({
+      ...assignment,
+      isDefault: assignment.id === preferred.id,
+      isActive: assignment.id === preferred.id ? true : assignment.isActive,
+    }));
+  }
+
+  private async ensureTemplates(
+    organizationId: string,
+    assignments: TemplateAssignmentWithTemplate[]
+  ) {
+    const activeAssignments = assignments.filter(
+      (assignment) => assignment.isActive && assignment.template.isActive
+    );
+    if (activeAssignments.length > 0) {
+      return this.ensureDefaultAssignment(organizationId, activeAssignments);
+    }
+
+    let systemTemplates = await prisma.template.findMany({
+      where: { isSystem: true, isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (systemTemplates.length === 0) {
+      const fallback = await prisma.template.create({
+        data: {
+          name: 'Simple Birthday',
+          type: TemplateType.PLAIN_TEXT,
+          subject: 'Happy Birthday {{first_name}}! 🎉',
+          content: `Happy Birthday {{first_name}}!
+
+Wishing you a wonderful day filled with joy and happiness.
+
+From everyone at {{organization_name}}`,
+          isSystem: true,
+          isActive: true,
+          channels: [DeliveryChannel.email],
+        },
+      });
+      systemTemplates = [fallback];
+    }
+
+    const simpleTemplate = systemTemplates.find(
+      (template) => template.name === 'Simple Birthday'
+    );
+    const defaultTemplateId = simpleTemplate?.id || systemTemplates[0].id;
+
+    await prisma.organizationTemplate.createMany({
+      data: systemTemplates.map((template) => ({
+        organizationId,
+        templateId: template.id,
+        isDefault: template.id === defaultTemplateId,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    const hydratedAssignments = await prisma.organizationTemplate.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        template: {
+          is: { isActive: true },
+        },
+      },
+      include: { template: true },
+      orderBy: { assignedAt: 'asc' },
+    });
+
+    return this.ensureDefaultAssignment(organizationId, hydratedAssignments);
+  }
+
+  private async sendEmailChannel(params: {
+    person: PersonRecord;
+    org: OrganizationDeliveryConfig;
+    templateAssignment: TemplateAssignmentWithTemplate;
+    subject: string;
+    content: string;
+    orgNow: DateTime;
+  }) {
+    const { person, org, templateAssignment, subject, content, orgNow } = params;
+    const template = templateAssignment.template;
+
+    const alreadySent = await this.alreadySentToday({
+      organizationId: org.id,
+      personId: person.id,
+      channel: DeliveryChannel.email,
+      orgNow,
+    });
+
+    if (alreadySent) {
+      console.log(`Skipping email for ${person.email}; already sent today.`);
+      return;
+    }
+
+    const fromEmail = resolveFromEmail(
+      org.emailFromAddress || DEFAULT_FROM_EMAIL
+    );
+    if (!fromEmail) {
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.email,
+        status: DeliveryStatus.FAILED,
+        errorMessage: 'Sender email is not configured',
+      });
+      return;
+    }
+
+    try {
+      const result = await this.emailProvider.send({
+        to: person.email,
+        subject,
+        html: template.type === TemplateType.HTML ? content : undefined,
+        text: template.type === TemplateType.PLAIN_TEXT ? content : undefined,
+        from: {
+          name: org.emailFromName || org.name || DEFAULT_FROM_NAME || '',
+          email: fromEmail,
+        },
+      });
+
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.email,
+        status: result.success ? DeliveryStatus.DELIVERED : DeliveryStatus.FAILED,
+        externalId: result.id,
+      });
+    } catch (error: any) {
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.email,
+        status: DeliveryStatus.FAILED,
+        errorMessage: error?.message || 'Email send failed',
+      });
+    }
+  }
+
+  private async sendSmsChannel(params: {
+    person: PersonRecord;
+    org: OrganizationDeliveryConfig;
+    templateAssignment: TemplateAssignmentWithTemplate;
+    content: string;
+    orgNow: DateTime;
+  }) {
+    const { person, org, templateAssignment, content, orgNow } = params;
+    const template = templateAssignment.template;
+
+    if (!org.smsEnabled || !person.phone) {
+      return;
+    }
+
+    const alreadySent = await this.alreadySentToday({
+      organizationId: org.id,
+      personId: person.id,
+      channel: DeliveryChannel.sms,
+      orgNow,
+    });
+
+    if (alreadySent) {
+      console.log(`Skipping SMS for ${person.fullName}; already sent today.`);
+      return;
+    }
+
+    try {
+      const smsResult = await smsService.send({
+        to: person.phone,
+        message: toPlainText(content, 160),
+        senderId: org.senderId || 'MomentOS',
+      });
+
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.sms,
+        status: smsResult.success ? DeliveryStatus.DELIVERED : DeliveryStatus.FAILED,
+        externalId: smsResult.messageId,
+        errorMessage: smsResult.error,
+      });
+    } catch (error: any) {
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.sms,
+        status: DeliveryStatus.FAILED,
+        errorMessage: error?.message || 'SMS send failed',
+      });
+    }
+  }
+
+  private async sendWhatsappChannel(params: {
+    person: PersonRecord;
+    org: OrganizationDeliveryConfig;
+    templateAssignment: TemplateAssignmentWithTemplate;
+    subject: string;
+    content: string;
+    orgNow: DateTime;
+  }) {
+    const { person, org, templateAssignment, subject, content, orgNow } = params;
+    const template = templateAssignment.template;
+
+    if (!org.whatsappEnabled || !person.phone) {
+      return;
+    }
+
+    const alreadySent = await this.alreadySentToday({
+      organizationId: org.id,
+      personId: person.id,
+      channel: DeliveryChannel.whatsapp,
+      orgNow,
+    });
+
+    if (alreadySent) {
+      console.log(`Skipping WhatsApp for ${person.fullName}; already sent today.`);
+      return;
+    }
+
+    try {
+      const message = toPlainText(`${subject}\n\n${content}`, 1000);
+      const whatsappResult = await whatsappService.send({
+        to: person.phone,
+        message,
+        from: org.senderId || process.env.TERMII_WHATSAPP_FROM || 'MomentOS',
+      });
+
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.whatsapp,
+        status: whatsappResult.success
+          ? DeliveryStatus.DELIVERED
+          : DeliveryStatus.FAILED,
+        externalId: whatsappResult.messageId,
+        errorMessage: whatsappResult.error,
+      });
+    } catch (error: any) {
+      await this.logDelivery({
+        personId: person.id,
+        templateId: template.id,
+        organizationId: org.id,
+        channel: DeliveryChannel.whatsapp,
+        status: DeliveryStatus.FAILED,
+        errorMessage: error?.message || 'WhatsApp send failed',
+      });
+    }
+  }
+
+  async sendBirthdayMessage(
+    person: PersonRecord,
+    org: OrganizationDeliveryConfig,
+    templateAssignments: TemplateAssignmentWithTemplate[],
+    orgNow: DateTime
+  ) {
+    const templateAssignment =
+      templateAssignments.find((assignment) => assignment.isDefault) ||
+      templateAssignments[0];
+
+    if (!templateAssignment) {
+      console.error('No active template assignment found for organization', org.id);
+      return;
+    }
+
+    const template = templateAssignment.template;
+
+    let personalizedIntro: string | null = null;
+    try {
+      personalizedIntro = await generatePersonalizedIntro({
+        fullName: person.fullName,
+        firstName: person.firstName,
+        role: person.role,
+        department: person.department,
+        organizationName: org.name,
+      });
+    } catch (error) {
+      console.warn('AI personalization failed:', error);
+    }
+
+    const variables = {
+      first_name: person.firstName || person.fullName.split(' ')[0],
+      full_name: person.fullName,
+      organization_name: org.name,
+      date: new Date().toLocaleDateString(),
+      personalized_intro: personalizedIntro || '',
+    };
+
+    let content = this.interpolateTemplate(template.content, variables);
+    const subject = this.interpolateTemplate(template.subject, variables);
+
+    if (personalizedIntro && !template.content.includes('{{personalized_intro}}')) {
+      content =
+        template.type === TemplateType.HTML
+          ? `<p>${escapeHtml(personalizedIntro)}</p>${content}`
+          : `${personalizedIntro}\n\n${content}`;
+    }
+
+    const channels = template.channels.length
+      ? template.channels
+      : [DeliveryChannel.email];
+
+    for (const channel of channels) {
+      if (channel === DeliveryChannel.email) {
+        await this.sendEmailChannel({
+          person,
+          org,
+          templateAssignment,
+          subject,
+          content,
+          orgNow,
+        });
+      } else if (channel === DeliveryChannel.sms) {
+        await this.sendSmsChannel({
+          person,
+          org,
+          templateAssignment,
+          content,
+          orgNow,
+        });
+      } else if (channel === DeliveryChannel.whatsapp) {
+        await this.sendWhatsappChannel({
+          person,
+          org,
+          templateAssignment,
+          subject,
+          content,
+          orgNow,
+        });
+      }
+    }
+  }
+
+  async sendAdminNotification(
+    upcomingPeople: PersonRecord[],
+    org: OrganizationNotificationConfig
+  ) {
+    const adminEmails = org.users.map((user) => user.email).filter(Boolean);
+    if (adminEmails.length === 0) {
+      return;
+    }
+
+    const peopleList = upcomingPeople
+      .map((person) => `- ${person.fullName} (${person.birthday.toLocaleDateString()})`)
+      .join('\n');
+
+    const html = `
+      <h2>Upcoming Birthdays - ${org.name}</h2>
+      <p>The following birthdays are coming up in 2 days:</p>
+      <pre>${peopleList}</pre>
+      <p>These birthday messages are scheduled to be sent automatically.</p>
+    `;
+
+    const fromEmail = resolveFromEmail(
+      NOTIFICATIONS_FROM_EMAIL || org.emailFromAddress || DEFAULT_FROM_EMAIL
+    );
+    if (!fromEmail) {
+      console.error('Cannot send admin notifications; sender email is missing.');
+      return;
+    }
+
+    for (const email of adminEmails) {
+      try {
+        await this.emailProvider.send({
+          to: email,
+          subject: `Upcoming birthdays - ${org.name}`,
+          html,
+          from: {
+            name: NOTIFICATIONS_FROM_NAME || org.name || DEFAULT_FROM_NAME || '',
+            email: fromEmail,
+          },
+        });
+      } catch (error: any) {
+        console.error(`Failed admin notification to ${email}:`, error?.message);
+      }
+    }
+  }
+
   async processOrganization(orgId: string) {
     console.log(`Processing organization: ${orgId}`);
 
@@ -210,36 +736,42 @@ class BirthdayScheduler {
         people: {
           where: { optedOut: false },
         },
-        templates: {
+        templateAssignments: {
           where: { isActive: true },
+          include: { template: true },
         },
-        users: true,
+        users: {
+          select: { email: true },
+        },
       },
     });
 
-    if (!org) return;
+    if (!org) {
+      return;
+    }
 
-    const orgNow = this.getOrgNow(org.timezone || 'UTC');
+    const orgNow = this.getOrgNow(org.timezone);
     const runDate = orgNow.toISODate();
     if (!runDate) {
       console.error(`Invalid run date for organization ${org.id}`);
       return;
     }
-    try {
-      const alreadyRan = await prisma.schedulerRun.findUnique({
-        where: {
-          organizationId_runDate: {
-            organizationId: org.id,
-            runDate,
-          },
+
+    const existingRun = await prisma.schedulerRun.findUnique({
+      where: {
+        organizationId_runDate: {
+          organizationId: org.id,
+          runDate,
         },
-      });
+      },
+      select: { id: true },
+    });
+    if (existingRun) {
+      console.log(`Skipping ${org.id}; already processed for ${runDate}`);
+      return;
+    }
 
-      if (alreadyRan) {
-        console.log(`Skipping ${org.id} - already processed for ${runDate}`);
-        return;
-      }
-
+    try {
       await prisma.schedulerRun.create({
         data: {
           organizationId: org.id,
@@ -247,32 +779,34 @@ class BirthdayScheduler {
         },
       });
     } catch (error: any) {
-      console.error(`Scheduler run check failed for ${org.id}:`, error.message);
+      if (error?.code === 'P2002') {
+        console.log(`Skipping ${org.id}; run lock already exists for ${runDate}`);
+        return;
+      }
+      console.error(`Failed to create run lock for ${org.id}:`, error?.message);
       return;
     }
 
-    const templates = await this.ensureTemplates(org);
+    const templateAssignments = await this.ensureTemplates(
+      org.id,
+      org.templateAssignments
+    );
 
-    // Find today's birthdays
     const todaysBirthdays = org.people.filter((person) =>
       this.isBirthdayToday(person.birthday, org.timezone)
     );
+    console.log(`Found ${todaysBirthdays.length} birthdays for organization ${org.id}`);
 
-    console.log(`Found ${todaysBirthdays.length} birthdays today`);
-
-    // Send birthday emails
     for (const person of todaysBirthdays) {
-      await this.sendBirthdayEmail(person, org, templates);
+      await this.sendBirthdayMessage(person, org, templateAssignments, orgNow);
     }
 
-    // Store last run time so per-org schedule only runs once per day.
     await prisma.organization.update({
       where: { id: org.id },
       data: { birthdayLastRunAt: new Date() },
     });
 
-    // Check for upcoming birthdays (2 days ahead for admin notification)
-    const upcomingBirthdays = org.people.filter((person: any) =>
+    const upcomingBirthdays = org.people.filter((person) =>
       this.getUpcomingBirthdays(2, org.timezone)(person.birthday)
     );
 
@@ -281,303 +815,12 @@ class BirthdayScheduler {
     }
   }
 
-  /**
-   * Send birthday email to recipient
-   */
-  async sendBirthdayEmail(person: any, org: any, templates: any[]) {
-    try {
-      // Use the default template for all sends.
-      const template = templates.find((item) => item.isDefault) || templates[0];
-
-      if (!template) {
-        console.error('No templates available for birthday email');
-        return;
-      }
-
-      const personalizedIntro = await generatePersonalizedIntro({
-        fullName: person.fullName,
-        firstName: person.firstName,
-        role: person.role,
-        department: person.department,
-        organizationName: org.name,
-      });
-
-      // Interpolate variables
-      let content = this.interpolateTemplate(template.content, {
-        first_name: person.firstName || person.fullName.split(' ')[0],
-        full_name: person.fullName,
-        organization_name: org.name,
-        date: new Date().toLocaleDateString(),
-        personalized_intro: personalizedIntro || '',
-      });
-
-      const subject = this.interpolateTemplate(template.subject, {
-        first_name: person.firstName || person.fullName.split(' ')[0],
-        full_name: person.fullName,
-      });
-
-      if (personalizedIntro && !template.content.includes('{{personalized_intro}}')) {
-        content =
-          template.type === TemplateType.HTML
-            ? `<p>${escapeHtml(personalizedIntro)}</p>${content}`
-            : `${personalizedIntro}\n\n${content}`;
-      }
-
-      // Send email via provider.
-      const fromEmail = org.emailFromAddress || DEFAULT_FROM_EMAIL;
-
-      if (!fromEmail) {
-        throw new Error('DEFAULT_FROM_EMAIL is not configured');
-      }
-
-      const channels = template.channels?.length ? template.channels : ['email'];
-
-      if (channels.includes('email')) {
-        const result = await this.emailProvider.send({
-          to: person.email,
-          subject,
-          html: template.type === TemplateType.HTML ? content : undefined,
-          text: template.type === TemplateType.PLAIN_TEXT ? content : undefined,
-          from: {
-            name: org.emailFromName || org.name || DEFAULT_FROM_NAME || '',
-            email: fromEmail,
-          },
-        });
-
-        await prisma.deliveryLog.create({
-          data: {
-            personId: person.id,
-            templateId: template.id,
-            organizationId: org.id,
-            channel: 'email',
-            status: result.success ? 'DELIVERED' : 'FAILED',
-            scheduledFor: new Date(),
-            sentAt: result.success ? new Date() : null,
-            deliveredAt: result.success ? new Date() : null,
-            externalId: result.id,
-          },
-        });
-      }
-
-      if (channels.includes('sms') && org.smsEnabled && person.phone) {
-        const smsContent = content.replace(/<[^>]*>/g, '').substring(0, 160);
-
-        const smsResult = await smsService.send({
-          to: person.phone,
-          message: smsContent,
-          senderId: org.senderId || 'MomentOS',
-        });
-
-        await prisma.deliveryLog.create({
-          data: {
-            personId: person.id,
-            templateId: template.id,
-            organizationId: org.id,
-            channel: 'sms',
-            status: smsResult.success ? 'DELIVERED' : 'FAILED',
-            scheduledFor: new Date(),
-            sentAt: smsResult.success ? new Date() : null,
-            deliveredAt: smsResult.success ? new Date() : null,
-            externalId: smsResult.messageId,
-            errorMessage: smsResult.error,
-          },
-        });
-      }
-
-      console.log(`✅ Birthday email sent to ${person.fullName}`);
-    } catch (error: any) {
-      console.error(`❌ Failed to send email to ${person.email}:`, error.message);
-
-      // Log failure
-      await prisma.deliveryLog.create({
-        data: {
-          personId: person.id,
-          templateId: templates[0]?.id,
-          organizationId: org.id,
-          channel: 'email',
-          status: 'FAILED',
-          scheduledFor: new Date(),
-          errorMessage: error.message,
-        },
-      });
-    }
-  }
-
-  /**
-   * Send admin notification about upcoming birthdays
-   */
-  async sendAdminNotification(upcomingPeople: any[], org: any) {
-    try {
-      const adminEmails = org.users.map((u: any) => u.email);
-
-      const peopleList = upcomingPeople
-        .map((p) => `- ${p.fullName} (${new Date(p.birthday).toLocaleDateString()})`)
-        .join('\n');
-
-      const html = `
-        <h2>Upcoming Birthdays - ${org.name}</h2>
-        <p>The following birthdays are coming up in 2 days:</p>
-        <pre>${peopleList}</pre>
-        <p>These birthday emails are scheduled to be sent automatically.</p>
-      `;
-
-      const notificationFromEmail =
-        NOTIFICATIONS_FROM_EMAIL || org.emailFromAddress || DEFAULT_FROM_EMAIL;
-
-      if (!notificationFromEmail) {
-        throw new Error('NOTIFICATIONS_FROM_EMAIL is not configured');
-      }
-
-      for (const email of adminEmails) {
-        await this.emailProvider.send({
-          to: email,
-          subject: `Upcoming birthdays - ${org.name}`,
-          html,
-          from: {
-            name: NOTIFICATIONS_FROM_NAME || org.name || DEFAULT_FROM_NAME || '',
-            email: notificationFromEmail,
-          },
-        });
-      }
-
-      console.log(`📬 Admin notification sent to ${adminEmails.length} admins`);
-    } catch (error: any) {
-      console.error('Failed to send admin notification:', error.message);
-    }
-  }
-
-  /**
-   * Get default template
-   */
-  private async ensureTemplates(org: any) {
-    const existing = await prisma.template.findMany({
-      where: { organizationId: org.id },
-    });
-
-    if (existing.length > 0) {
-      return existing.filter((template) => template.isActive || template.isDefault);
-    }
-
-    // Seed defaults for orgs without templates.
-    const defaultTemplates = [
-      {
-        name: 'Simple Birthday',
-        type: TemplateType.PLAIN_TEXT,
-        subject: 'Happy Birthday {{first_name}}! 🎉',
-        content: `Happy Birthday {{first_name}}!
-
-Wishing you a wonderful day filled with joy and happiness.
-
-From everyone at {{organization_name}}`,
-        isDefault: true,
-        isActive: true,
-      },
-      {
-        name: 'Professional Birthday',
-        type: TemplateType.HTML,
-        subject: 'Happy Birthday {{first_name}}!',
-        content: `<html>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center; border-radius: 8px 8px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 32px;">🎉 Happy Birthday! 🎉</h1>
-  </div>
-  <div style="background: white; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-    <p style="font-size: 18px; line-height: 1.6; color: #374151;">
-      Dear {{first_name}},
-    </p>
-    <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-      On behalf of everyone at {{organization_name}}, we want to wish you a very happy birthday!
-      We hope your special day is filled with joy, laughter, and wonderful memories.
-    </p>
-    <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-      Thank you for being such an important part of our community.
-    </p>
-    <div style="margin-top: 30px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
-      <p style="font-size: 14px; color: #6b7280; margin: 0;">
-        With warm wishes,<br>
-        <strong>{{organization_name}}</strong>
-      </p>
-    </div>
-  </div>
-  <div style="text-align: center; margin-top: 20px;">
-    <p style="font-size: 12px; color: #9ca3af;">
-      This is an automated birthday message from MomentOS
-    </p>
-  </div>
-</body>
-</html>`,
-        isDefault: false,
-        isActive: false,
-      },
-      {
-        name: 'Fun & Colorful',
-        type: TemplateType.HTML,
-        subject: '🎂 It\'s Your Special Day, {{first_name}}! 🎈',
-        content: `<html>
-<body style="font-family: 'Comic Sans MS', cursive, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #fef3c7;">
-  <div style="background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
-    <div style="text-align: center; margin-bottom: 30px;">
-      <div style="font-size: 64px; margin-bottom: 10px;">🎉🎂🎈</div>
-      <h1 style="color: #dc2626; margin: 0; font-size: 36px; text-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
-        HAPPY BIRTHDAY!
-      </h1>
-    </div>
-    <p style="font-size: 20px; text-align: center; color: #1f2937; line-height: 1.8;">
-      Hey <strong>{{first_name}}</strong>! 🎊
-    </p>
-    <p style="font-size: 16px; text-align: center; color: #374151; line-height: 1.6;">
-      Another trip around the sun completed! We hope your birthday is as amazing as you are.
-      May your day be filled with cake, laughter, and everything that makes you smile!
-    </p>
-    <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 30px 0; text-align: center;">
-      <p style="margin: 0; font-size: 18px; color: #92400e;">
-        🎁 Make a wish! 🎁
-      </p>
-    </div>
-    <p style="text-align: center; font-size: 14px; color: #6b7280; margin-top: 30px;">
-      Cheers from all of us at<br>
-      <strong style="color: #1f2937; font-size: 16px;">{{organization_name}}</strong>
-    </p>
-  </div>
-</body>
-</html>`,
-        isDefault: false,
-        isActive: false,
-      },
-    ];
-
-    const created = await Promise.all(
-      defaultTemplates.map((template) =>
-        prisma.template.create({
-          data: {
-            ...template,
-            organizationId: org.id,
-          },
-        })
-      )
-    );
-
-    return created.filter((template) => template.isActive || template.isDefault);
-  }
-
-  /**
-   * Interpolate template variables
-   */
-  private interpolateTemplate(template: string, variables: Record<string, string>): string {
-    let result = template;
-    for (const [key, value] of Object.entries(variables)) {
-      result = result.replace(new RegExp(`{{${key}}}`, 'g'), value);
-    }
-    return result;
-  }
-
   private shouldRunForOrg(org: {
     timezone: string;
     birthdaySendHour: number;
     birthdaySendMinute: number;
     birthdayLastRunAt: Date | null;
   }) {
-    // Run only when org-local time hits configured hour/minute.
     const local = this.getOrgNow(org.timezone || 'UTC');
 
     if (local.hour !== org.birthdaySendHour || local.minute !== org.birthdaySendMinute) {
@@ -595,17 +838,13 @@ From everyone at {{organization_name}}`,
     return lastLocal !== local.toISODate();
   }
 
-  /**
-   * Run the scheduler
-   */
   async run() {
-    console.log('🚀 Birthday Scheduler started');
+    console.log('Birthday scheduler started.');
 
-    // Get all organizations
     const organizations = await prisma.organization.findMany({
+      where: { isSuspended: false },
       select: {
         id: true,
-        name: true,
         timezone: true,
         birthdaySendHour: true,
         birthdaySendMinute: true,
@@ -613,52 +852,35 @@ From everyone at {{organization_name}}`,
       },
     });
 
-    console.log(`Found ${organizations.length} organizations`);
-
-    // Process each organization
     for (const org of organizations) {
       if (this.shouldRunForOrg(org)) {
         await this.processOrganization(org.id);
       }
     }
 
-    console.log('✅ Scheduler run complete');
+    console.log('Scheduler run complete.');
   }
 
-  /**
-   * Start cron job
-   */
   startCron() {
-    console.log('⏰ Scheduling daily birthday checks at 9:00 AM');
+    console.log('Scheduling birthday checks every minute.');
 
-    // Check every minute; per-org time windows handled in shouldRunForOrg
     cron.schedule('* * * * *', async () => {
-      console.log(`\n${'='.repeat(50)}`);
-      console.log(`Running scheduled birthday check - ${new Date().toISOString()}`);
-      console.log('='.repeat(50));
+      console.log(`Running scheduled birthday check: ${new Date().toISOString()}`);
       await this.run();
     });
 
-    // Also run immediately on startup (for testing)
-    console.log('Running initial check...');
-    this.run();
+    console.log('Running initial check.');
+    void this.run();
   }
 }
 
-// ============================================================================
-// START WORKER
-// ============================================================================
-
 const emailProvider = new ResendEmailProvider();
-
 const scheduler = new BirthdayScheduler(emailProvider);
 
-// Start the cron job
 scheduler.startCron();
 
-// Keep process alive
 process.on('SIGINT', async () => {
-  console.log('\n⏹️  Shutting down scheduler...');
+  console.log('Shutting down scheduler.');
   await prisma.$disconnect();
   process.exit(0);
 });

@@ -22,6 +22,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
     emailFromName: '',
     emailFromAddress: '',
     smsEnabled: false,
+    whatsappEnabled: false,
     senderId: 'MomentOS',
     timezone: 'UTC',
     birthdaySendHour: 9,
@@ -42,6 +43,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
         emailFromName: org.emailFromName || '',
         emailFromAddress: org.emailFromAddress || '',
         smsEnabled: Boolean(org.smsEnabled),
+        whatsappEnabled: Boolean(org.whatsappEnabled),
         senderId: org.senderId || 'MomentOS',
         timezone: org.timezone || 'UTC',
         birthdaySendHour: org.birthdaySendHour ?? 9,
@@ -65,6 +67,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
           emailFromName: form.emailFromName || null,
           emailFromAddress: form.emailFromAddress || null,
           smsEnabled: form.smsEnabled,
+          whatsappEnabled: form.whatsappEnabled,
           senderId: form.senderId || null,
           timezone: form.timezone,
           birthdaySendHour: Number(form.birthdaySendHour),
@@ -168,6 +171,19 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
             </label>
             <p className="text-xs text-gray-500 mt-1">
               Sends birthday messages by SMS when a phone number is available.
+            </p>
+          </div>
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={form.whatsappEnabled}
+                onChange={(e) => setForm({ ...form, whatsappEnabled: e.target.checked })}
+              />
+              Enable WhatsApp Delivery
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Sends birthday messages to WhatsApp numbers when available.
             </p>
           </div>
           {form.smsEnabled && (

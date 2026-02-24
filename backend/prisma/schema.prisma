@@ -27,6 +27,7 @@ model Organization {
   emailFromName    String?
   emailFromAddress String?
   smsEnabled       Boolean   @default(false)
+  whatsappEnabled  Boolean   @default(false)
   senderId         String?   @default("MomentOS")
   
   // Relationships

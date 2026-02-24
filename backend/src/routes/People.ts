@@ -8,7 +8,18 @@ import { normalizeOptionalPhone } from "../services/phone";
 import { computeOnboardingState } from "../services/onboarding";
 import { PersonUpdateSchema, validateUpdate } from "../middleware/validation";
 import { generateCsvSuggestions, generatePersonalizedIntro } from "../services/ai";
-import { authenticate, AuthRequest, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, getNextBirthdayOccurrence, getOrgDateTime, getUserErrorMessage, interpolateTemplate, prisma } from "../serverContext";
+import {
+  authenticate,
+  AuthRequest,
+  DEFAULT_FROM_EMAIL,
+  DEFAULT_FROM_NAME,
+  getNextBirthdayOccurrence,
+  getOrgDateTime,
+  getUserErrorMessage,
+  interpolateTemplate,
+  prisma,
+  resolveFromEmail,
+} from "../serverContext";
 
 export function registerPeopleRoutes(app: Express) {
   const escapeHtml = (value: string) =>
@@ -494,7 +505,9 @@ app.post(
             : `${personalizedIntro}\n\n${content}`;
       }
 
-      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+      const fromEmail = resolveFromEmail(
+        org?.emailFromAddress || DEFAULT_FROM_EMAIL
+      );
 
       if (!fromEmail) {
         return res.status(400).json({ error: "Sender email not configured" });

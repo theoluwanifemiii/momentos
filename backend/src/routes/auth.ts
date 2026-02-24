@@ -29,6 +29,7 @@ import {
   getUserErrorMessage,
   otpService,
   prisma,
+  resolveFromEmail,
   revokeAdminSession,
   OtpPurpose,
   logAdminAction,
@@ -554,7 +555,9 @@ export function registerAuthRoutes(app: Express) {
         where: { id: user.organizationId },
       });
 
-      const welcomeFromEmail = org?.emailFromAddress || WELCOME_FROM_EMAIL;
+      const welcomeFromEmail = resolveFromEmail(
+        org?.emailFromAddress || WELCOME_FROM_EMAIL
+      );
       if (!welcomeFromEmail) {
         return res.status(400).json({ error: "Sender email not configured" });
       }
@@ -682,6 +685,13 @@ export function registerAuthRoutes(app: Express) {
       const { subject, text, html } = waitlistWelcomeTemplate({
         recipientName: data.firstName,
       });
+      const waitlistFromEmail = resolveFromEmail(WAITLIST_FROM_EMAIL);
+      if (!waitlistFromEmail) {
+        return res
+          .status(400)
+          .json({ error: "Sender email not configured" });
+      }
+
       await EmailService.send({
         to: data.email.toLowerCase(),
         subject,
@@ -689,7 +699,7 @@ export function registerAuthRoutes(app: Express) {
         html,
         from: {
           name: WAITLIST_FROM_NAME,
-          email: WAITLIST_FROM_EMAIL,
+          email: waitlistFromEmail,
         },
         replyTo: WAITLIST_REPLY_TO,
       });

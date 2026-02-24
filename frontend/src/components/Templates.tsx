@@ -14,6 +14,8 @@ type TemplatesProps = {
   onSelectTab?: (tab: 'people' | 'templates' | 'settings' | 'upcoming' | 'dashboard') => void;
 };
 
+type DeliveryChannel = 'email' | 'sms' | 'whatsapp';
+
 // Templates: create, set default, preview, test, and delete email templates.
 export default function Templates({ api, onboarding, onOnboardingUpdate, onSelectTab }: TemplatesProps) {
   const [templates, setTemplates] = useState<any[]>([]);
@@ -31,12 +33,14 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const channelOptions: DeliveryChannel[] = ['email', 'sms', 'whatsapp'];
   const [form, setForm] = useState({
     name: '',
     type: 'PLAIN_TEXT',
     subject: '',
     content: '',
     imageUrl: '',
+    channels: ['email'] as DeliveryChannel[],
   });
 
   useEffect(() => {
@@ -78,6 +82,10 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       setError('Name, subject, and content are required.');
       return;
     }
+    if (!form.channels.length) {
+      setError('Select at least one delivery channel.');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -92,6 +100,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
             : editorMode === 'plain'
             ? plainContent
             : form.content,
+        channels: form.channels,
       };
       if (form.imageUrl) {
         payload.imageUrl = form.imageUrl;
@@ -111,6 +120,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         subject: '',
         content: '',
         imageUrl: '',
+        channels: ['email'],
       });
       setPlainContent('');
       setEditorMode('plain');
@@ -129,6 +139,17 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     setShowCreateModal(false);
     setAiPrompt('');
     setAiError('');
+  };
+
+  const toggleChannel = (channel: DeliveryChannel) => {
+    setForm((prev) => {
+      const exists = prev.channels.includes(channel);
+      if (exists) {
+        if (prev.channels.length === 1) return prev;
+        return { ...prev, channels: prev.channels.filter((item) => item !== channel) };
+      }
+      return { ...prev, channels: [...prev.channels, channel] };
+    });
   };
 
   const handleGenerateDraft = async () => {
@@ -168,6 +189,10 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       subject: template.subject || '',
       content: template.content || '',
       imageUrl: template.imageUrl || '',
+      channels:
+        Array.isArray(template.channels) && template.channels.length > 0
+          ? template.channels
+          : ['email'],
     });
     setPlainContent(
       template.type === 'HTML' ? stripHtml(template.content || '') : template.content || ''
@@ -179,6 +204,10 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     if (!editingTemplate) return;
     if (!form.name || !form.subject || !form.content) {
       setError('Name, subject, and content are required.');
+      return;
+    }
+    if (!form.channels.length) {
+      setError('Select at least one delivery channel.');
       return;
     }
 
@@ -198,6 +227,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
               ? plainContent
               : form.content,
           imageUrl: form.imageUrl || null,
+          channels: form.channels,
         }),
       });
       setEditingTemplate(null);
@@ -207,6 +237,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         subject: '',
         content: '',
         imageUrl: '',
+        channels: ['email'],
       });
       setPlainContent('');
       setEditorMode('plain');
@@ -286,6 +317,28 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this template?')) return;
+
+    setSaving(true);
+    setError('');
+    try {
+      const data = await api.call(`/templates/${id}`, { method: 'DELETE' });
+      if (data?.onboarding) {
+        onOnboardingUpdate(data.onboarding);
+      }
+      if (preview?.id === id) {
+        setPreview(null);
+      }
+      setSuccessMessage('✅ Template deleted.');
+      await loadTemplates();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {successMessage && (
@@ -304,8 +357,16 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-xl font-bold">Templates</h2>
-          <div className="text-sm text-gray-500">
-            MomentOS provides a curated set of templates.
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-500">
+              MomentOS provides a curated set of templates.
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Create Template
+            </button>
           </div>
         </div>
 
@@ -321,6 +382,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channels</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
@@ -341,6 +403,9 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{template.type}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {template.subject}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {(template.channels || ['email']).join(', ')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <label className="inline-flex items-center gap-2">
@@ -372,6 +437,13 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           className="text-blue-600 hover:underline"
                         >
                           Test
+                        </button>
+                        <button
+                          onClick={() => handleDelete(template.id)}
+                          disabled={saving}
+                          className="text-red-600 hover:underline disabled:opacity-50"
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -486,6 +558,24 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                       </span>
                     </div>
                     {aiError && <p className="text-xs text-red-600 mt-2">{aiError}</p>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Delivery Channels</label>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      {channelOptions.map((channel) => (
+                        <label key={channel} className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={form.channels.includes(channel)}
+                            onChange={() => toggleChannel(channel)}
+                          />
+                          <span className="uppercase">{channel}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Email, SMS, and WhatsApp are sent only if enabled in Settings.
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">Content</label>
@@ -605,6 +695,24 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           : 'Template content (use {{first_name}} and {{organization_name}})'
                       }
                     />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Delivery Channels</label>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      {channelOptions.map((channel) => (
+                        <label key={channel} className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={form.channels.includes(channel)}
+                            onChange={() => toggleChannel(channel)}
+                          />
+                          <span className="uppercase">{channel}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Email, SMS, and WhatsApp are sent only if enabled in Settings.
+                    </p>
                   </div>
                   {form.type === 'CUSTOM_IMAGE' && (
                     <div className="md:col-span-2">

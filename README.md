@@ -86,6 +86,26 @@ User Experience
 
 ⸻
 
+✅ V1 Functional Status (Current)
+
+Working now
+	•	Template lifecycle: create, edit, set default, activate/deactivate, delete
+	•	Default template assignment per organization with duplicate-safe assignment flow
+	•	Channel-aware templates (Email, SMS, WhatsApp)
+	•	Organization settings for channel toggles (SMS + WhatsApp)
+	•	CSV upload with AI suggestions and international phone normalization
+	•	Upcoming birthdays tab/view and filtered people workflows
+	•	Manual sends: email and SMS routes
+	•	Scheduler automation with per-org timezone/send-time handling
+	•	Dedupe guard to avoid duplicate same-day automated sends per channel
+
+Pending / follow-up
+	•	Production rollout validation for WhatsApp provider credentials
+	•	End-to-end smoke test in production across all enabled channels
+	•	Final QA pass on admin/internal auth session behavior in production
+
+⸻
+
 🧠 Design Philosophy
 	•	Clarity over beauty
 	•	Operational tools should feel calm
@@ -160,6 +180,28 @@ A sample CSV is available in /examples.
 	•	Advanced analytics dashboards
 
 These may come later — but not now.
+
+Note: WhatsApp as a birthday delivery channel is now supported in V1; broader WhatsApp notification workflows remain out of scope.
+
+⸻
+
+🚢 Deployment Checklist (V1)
+	1. Apply database migrations:
+		•	`npx prisma migrate deploy`
+	2. Rebuild backend + worker with fresh Prisma client:
+		•	backend: `npm run build`
+		•	worker: `npx prisma generate --schema=prisma/schema.prisma && npm run build`
+	3. Confirm environment variables:
+		•	`DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`
+		•	`TERMII_API_KEY`, `SMS_TEST_MODE` (optional), `WHATSAPP_TEST_MODE` (optional)
+		•	`DEFAULT_FROM_EMAIL`, `NOTIFICATIONS_FROM_EMAIL`
+	4. Restart backend, frontend, and worker services.
+	5. Run smoke tests:
+		•	Login + onboarding load
+		•	Template create/edit/delete
+		•	CSV upload (international numbers)
+		•	Manual email send + manual SMS send
+		•	Scheduled run (email/sms/whatsapp according to template channels)
 
 ⸻
 

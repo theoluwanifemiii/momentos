@@ -4,7 +4,6 @@
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import { normalizeOptionalPhone } from './phone';
-import { SMSService } from './smsService';
 
 // Validation schema
 const PersonSchema = z.object({
@@ -145,16 +144,6 @@ export class CSVValidator {
       
       let phone: string | null = null;
       if (data.phone) {
-        if (!SMSService.isValidNigerianPhone(data.phone)) {
-          errors.push({
-            row: rowNum,
-            field: 'phone',
-            message:
-              'Invalid phone number format. Use: 08012345678 or +2348012345678',
-            data: record,
-          });
-          continue;
-        }
         try {
           phone = normalizeOptionalPhone(data.phone);
         } catch (error: any) {

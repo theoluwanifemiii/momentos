@@ -17,6 +17,7 @@ RUN npm install
 COPY tsconfig.json ./
 COPY scheduler.ts ./
 COPY smsService.ts ./
+COPY whatsappService.ts ./
 COPY prisma ./prisma
 
 # Generate Prisma Client with explicit binary target

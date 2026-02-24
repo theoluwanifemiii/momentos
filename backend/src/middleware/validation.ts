@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { z } from "zod";
+import { DeliveryChannel, TemplateType } from "@prisma/client";
 
 // Person update schema - only allow safe fields
 export const PersonUpdateSchema = z
@@ -28,6 +29,7 @@ export const SettingsUpdateSchema = z
     emailFromName: z.string().optional(),
     emailFromAddress: z.string().email().optional(),
     smsEnabled: z.boolean().optional(),
+    whatsappEnabled: z.boolean().optional(),
     senderId: z.string().max(11).optional(),
     birthdaySendHour: z.number().min(0).max(23).optional(),
     birthdaySendMinute: z.number().min(0).max(59).optional(),
@@ -38,9 +40,11 @@ export const SettingsUpdateSchema = z
 export const TemplateUpdateSchema = z
   .object({
     name: z.string().optional(),
+    type: z.nativeEnum(TemplateType).optional(),
     subject: z.string().optional(),
     content: z.string().optional(),
-    imageUrl: z.string().url().optional(),
+    imageUrl: z.string().url().nullable().optional(),
+    channels: z.array(z.nativeEnum(DeliveryChannel)).min(1).optional(),
     isActive: z.boolean().optional(),
     isDefault: z.boolean().optional(),
   })

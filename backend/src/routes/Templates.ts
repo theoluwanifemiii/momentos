@@ -1,9 +1,19 @@
 import { Express, Response } from "express";
-import { TemplateType } from "@prisma/client";
+import { DeliveryChannel, TemplateType } from "@prisma/client";
+import { z } from "zod";
 import { EmailService } from "../services/emailService";
 import { computeOnboardingState, markOnboardingStep } from "../services/onboarding";
-import { OrganizationTemplateUpdateSchema, TemplateUpdateSchema, validateUpdate } from "../middleware/validation";
-import { authenticate, AuthRequest, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, getUserErrorMessage, interpolateTemplate, prisma } from "../serverContext";
+import { TemplateUpdateSchema, validateUpdate } from "../middleware/validation";
+import {
+  authenticate,
+  AuthRequest,
+  DEFAULT_FROM_EMAIL,
+  DEFAULT_FROM_NAME,
+  getUserErrorMessage,
+  interpolateTemplate,
+  prisma,
+  resolveFromEmail,
+} from "../serverContext";
 
 export function registerTemplatesRoutes(app: Express) {
 // TEMPLATE ROUTES
@@ -71,14 +81,71 @@ app.get(
   }
 );
 
-// Create template (first template becomes default).
+// Create custom template for this organization.
 app.post(
   "/api/templates",
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      return res.status(403).json({
-        error: "Custom templates are disabled. Use the default templates.",
+      const schema = z.object({
+        name: z.string().min(1),
+        type: z.nativeEnum(TemplateType).default("PLAIN_TEXT"),
+        subject: z.string().min(1),
+        content: z.string().min(1),
+        imageUrl: z.string().url().nullable().optional(),
+        channels: z
+          .array(z.nativeEnum(DeliveryChannel))
+          .min(1)
+          .default(["email"]),
+      });
+
+      const data = schema.parse(req.body);
+      const organizationId = req.organizationId!;
+
+      const [template, hasDefault] = await prisma.$transaction(async (tx) => {
+        const createdTemplate = await tx.template.create({
+          data: {
+            name: data.name.trim(),
+            type: data.type,
+            subject: data.subject.trim(),
+            content: data.content,
+            imageUrl: data.imageUrl || null,
+            channels: data.channels,
+            isActive: true,
+            isSystem: false,
+          },
+        });
+
+        const existingDefault = await tx.organizationTemplate.findFirst({
+          where: {
+            organizationId,
+            isDefault: true,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        await tx.organizationTemplate.create({
+          data: {
+            organizationId,
+            templateId: createdTemplate.id,
+            isDefault: !existingDefault,
+            isActive: true,
+          },
+        });
+
+        return [createdTemplate, Boolean(existingDefault)] as const;
+      });
+
+      const onboarding = await computeOnboardingState(prisma, organizationId);
+
+      res.json({
+        template: {
+          ...template,
+          isDefault: !hasDefault,
+          isActive: true,
+        },
+        onboarding,
       });
     } catch (err: any) {
       res.status(400).json({ error: getUserErrorMessage(err) });
@@ -94,10 +161,7 @@ app.put(
     try {
       const { id } = req.params;
 
-      const safeData = validateUpdate(
-        OrganizationTemplateUpdateSchema,
-        req.body
-      );
+      const safeData = validateUpdate(TemplateUpdateSchema, req.body);
 
       const assignment = await prisma.organizationTemplate.findFirst({
         where: {
@@ -111,35 +175,125 @@ app.put(
         return res.status(404).json({ error: "Template not found" });
       }
 
-      let updatedAssignment;
+      let updatedTemplate = assignment.template;
+      let updatedAssignment = {
+        id: assignment.id,
+        isDefault: assignment.isDefault,
+        isActive: assignment.isActive,
+      };
+
+      const hasTemplateUpdates =
+        safeData.name !== undefined ||
+        safeData.type !== undefined ||
+        safeData.subject !== undefined ||
+        safeData.content !== undefined ||
+        safeData.imageUrl !== undefined ||
+        safeData.channels !== undefined;
+
+      if (hasTemplateUpdates) {
+        if (assignment.template.isSystem) {
+          // Clone system templates so org customizations do not affect other orgs.
+          updatedTemplate = await prisma.template.create({
+            data: {
+              name: safeData.name ?? assignment.template.name,
+              type: safeData.type ?? assignment.template.type,
+              subject: safeData.subject ?? assignment.template.subject,
+              content: safeData.content ?? assignment.template.content,
+              imageUrl:
+                safeData.imageUrl !== undefined
+                  ? safeData.imageUrl
+                  : assignment.template.imageUrl,
+              channels: safeData.channels ?? assignment.template.channels,
+              isActive: true,
+              isSystem: false,
+            },
+          });
+
+          const reassigned = await prisma.organizationTemplate.update({
+            where: { id: assignment.id },
+            data: { templateId: updatedTemplate.id },
+          });
+
+          updatedAssignment = {
+            id: reassigned.id,
+            isDefault: reassigned.isDefault,
+            isActive: reassigned.isActive,
+          };
+        } else {
+          updatedTemplate = await prisma.template.update({
+            where: { id: assignment.templateId },
+            data: {
+              ...(safeData.name !== undefined ? { name: safeData.name } : {}),
+              ...(safeData.type !== undefined ? { type: safeData.type } : {}),
+              ...(safeData.subject !== undefined ? { subject: safeData.subject } : {}),
+              ...(safeData.content !== undefined ? { content: safeData.content } : {}),
+              ...(safeData.imageUrl !== undefined
+                ? { imageUrl: safeData.imageUrl }
+                : {}),
+              ...(safeData.channels !== undefined ? { channels: safeData.channels } : {}),
+            },
+          });
+        }
+      }
+
       if (safeData?.isDefault === true) {
         const [updated] = await prisma.$transaction([
           prisma.organizationTemplate.update({
-            where: { id: assignment.id },
+            where: { id: updatedAssignment.id },
             data: { isDefault: true, isActive: true },
           }),
           prisma.organizationTemplate.updateMany({
             where: {
               organizationId: req.organizationId!,
-              id: { not: assignment.id },
+              id: { not: updatedAssignment.id },
               isDefault: true,
             },
             data: { isDefault: false },
           }),
         ]);
-        updatedAssignment = updated;
-      } else {
-        updatedAssignment = await prisma.organizationTemplate.update({
-          where: { id: assignment.id },
-          data: {
-            ...(safeData.isDefault !== undefined
-              ? { isDefault: safeData.isDefault }
-              : {}),
-            ...(safeData.isActive !== undefined
-              ? { isActive: safeData.isActive }
-              : {}),
+        updatedAssignment = {
+          id: updated.id,
+          isDefault: updated.isDefault,
+          isActive: updated.isActive,
+        };
+      } else if (safeData?.isDefault === false) {
+        const otherDefault = await prisma.organizationTemplate.findFirst({
+          where: {
+            organizationId: req.organizationId!,
+            id: { not: updatedAssignment.id },
+            isDefault: true,
+            isActive: true,
           },
         });
+        if (!otherDefault) {
+          return res
+            .status(400)
+            .json({ error: "Choose another default template first." });
+        }
+        const updated = await prisma.organizationTemplate.update({
+          where: { id: updatedAssignment.id },
+          data: { isDefault: false },
+        });
+        updatedAssignment = {
+          id: updated.id,
+          isDefault: updated.isDefault,
+          isActive: updated.isActive,
+        };
+      } else if (safeData.isActive !== undefined) {
+        if (safeData.isActive === false && updatedAssignment.isDefault) {
+          return res
+            .status(400)
+            .json({ error: "Set another default before disabling this template." });
+        }
+        const updated = await prisma.organizationTemplate.update({
+          where: { id: updatedAssignment.id },
+          data: { isActive: safeData.isActive },
+        });
+        updatedAssignment = {
+          id: updated.id,
+          isDefault: updated.isDefault,
+          isActive: updated.isActive,
+        };
       }
 
       const onboarding = await computeOnboardingState(
@@ -149,7 +303,7 @@ app.put(
 
       res.json({
         template: {
-          ...assignment.template,
+          ...updatedTemplate,
           isDefault: updatedAssignment.isDefault,
           isActive: updatedAssignment.isActive,
         },
@@ -161,16 +315,105 @@ app.put(
   }
 );
 
-// Delete template; keep at least one default template per org.
+// Delete template assignment for this organization.
 app.delete(
   "/api/templates/:id",
   authenticate,
   async (req: AuthRequest, res: Response) => {
     try {
-      return res.status(403).json({
-        error: "Default templates cannot be deleted.",
+      const { id } = req.params;
+      const organizationId = req.organizationId!;
+
+      const assignment = await prisma.organizationTemplate.findFirst({
+        where: {
+          organizationId,
+          templateId: id,
+        },
+        include: { template: true },
+      });
+
+      if (!assignment) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      const activeTemplatesCount = await prisma.organizationTemplate.count({
+        where: {
+          organizationId,
+          isActive: true,
+        },
+      });
+      if (assignment.isActive && activeTemplatesCount <= 1) {
+        return res.status(400).json({
+          error: "At least one active template is required.",
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        if (assignment.isDefault) {
+          const replacement = await tx.organizationTemplate.findFirst({
+            where: {
+              organizationId,
+              id: { not: assignment.id },
+              isActive: true,
+            },
+            orderBy: { assignedAt: "desc" },
+          });
+
+          if (!replacement) {
+            throw new Error("No replacement default template found");
+          }
+
+          await tx.organizationTemplate.updateMany({
+            where: {
+              organizationId,
+              isDefault: true,
+            },
+            data: { isDefault: false },
+          });
+
+          await tx.organizationTemplate.update({
+            where: { id: replacement.id },
+            data: { isDefault: true, isActive: true },
+          });
+        }
+
+        await tx.organizationTemplate.delete({
+          where: { id: assignment.id },
+        });
+      });
+
+      if (!assignment.template.isSystem) {
+        const assignmentCount = await prisma.organizationTemplate.count({
+          where: { templateId: assignment.templateId },
+        });
+
+        if (assignmentCount === 0) {
+          try {
+            await prisma.template.delete({
+              where: { id: assignment.templateId },
+            });
+          } catch {
+            // Keep historical delivery logs intact if template has existing log references.
+            await prisma.template.update({
+              where: { id: assignment.templateId },
+              data: { isActive: false },
+            });
+          }
+        }
+      }
+
+      const onboarding = await computeOnboardingState(prisma, organizationId);
+
+      res.json({
+        success: true,
+        onboarding,
       });
     } catch (err: any) {
+      if (err?.message === "No replacement default template found") {
+        return res.status(400).json({
+          error: "Set another active default template before deleting this one.",
+        });
+      }
       res.status(500).json({ error: getUserErrorMessage(err) });
     }
   }
@@ -280,7 +523,9 @@ app.post(
       });
 
       // Send actual email via Resend
-      const fromEmail = org?.emailFromAddress || DEFAULT_FROM_EMAIL;
+      const fromEmail = resolveFromEmail(
+        org?.emailFromAddress || DEFAULT_FROM_EMAIL
+      );
 
       if (!fromEmail) {
         return res.status(400).json({ error: "Sender email not configured" });

@@ -26,6 +26,36 @@ export const WELCOME_FROM_NAME =
   process.env.WELCOME_FROM_NAME || "Olu from MomentOS";
 export const WELCOME_REPLY_TO =
   process.env.WELCOME_REPLY_TO || "founder@usemomentos.xyz";
+const extractDomain = (value?: string | null) => {
+  if (!value) return null;
+  const atIndex = value.lastIndexOf("@");
+  if (atIndex === -1) return null;
+  return value.slice(atIndex + 1).trim().toLowerCase();
+};
+const RESEND_ALLOWED_DOMAINS = (
+  process.env.RESEND_ALLOWED_DOMAINS || extractDomain(DEFAULT_FROM_EMAIL) || ""
+)
+  .split(",")
+  .map((domain) => domain.trim().toLowerCase())
+  .filter(Boolean);
+const HAS_DOMAIN_ALLOWLIST = RESEND_ALLOWED_DOMAINS.length > 0;
+const isAllowedSender = (email?: string | null) => {
+  if (!email) return false;
+  if (!HAS_DOMAIN_ALLOWLIST) return true;
+  const domain = extractDomain(email);
+  return domain ? RESEND_ALLOWED_DOMAINS.includes(domain) : false;
+};
+export const resolveFromEmail = (candidate?: string | null) => {
+  const trimmed = candidate?.trim();
+  if (trimmed && isAllowedSender(trimmed)) return trimmed;
+  if (DEFAULT_FROM_EMAIL && isAllowedSender(DEFAULT_FROM_EMAIL)) {
+    return DEFAULT_FROM_EMAIL;
+  }
+  if (RESEND_ALLOWED_DOMAINS.length > 0) {
+    return `noreply@${RESEND_ALLOWED_DOMAINS[0]}`;
+  }
+  return trimmed || DEFAULT_FROM_EMAIL || null;
+};
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is required");
@@ -219,7 +249,7 @@ async function createAndSendOtp(params: {
     },
   });
 
-  const fromEmail = DEFAULT_FROM_EMAIL;
+  const fromEmail = resolveFromEmail(DEFAULT_FROM_EMAIL);
   const fromName = DEFAULT_FROM_NAME || "MomentOS";
 
   if (!fromEmail) {
