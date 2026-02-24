@@ -12,13 +12,13 @@ WORKDIR /app/worker
 ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x
 
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm install
 
 COPY tsconfig.json ./
 COPY scheduler.ts ./
 COPY smsService.ts ./
 COPY whatsappService.ts ./
-COPY prisma ./prisma
 
 # Generate Prisma Client with explicit binary target
 RUN npx prisma generate --schema=prisma/schema.prisma
