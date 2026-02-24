@@ -103,6 +103,8 @@ const adminListeners = new Set<(count: number) => void>();
 const notifyAdmin = () => {
   adminListeners.forEach((listener) => listener(adminPending));
 };
+const ADMIN_SESSION_TOKEN_KEY = "admin_session_token";
+const ADMIN_CSRF_TOKEN_KEY = "admin_csrf_token";
 
 export const adminApi = {
   subscribe(listener: (count: number) => void) {
@@ -113,10 +115,15 @@ export const adminApi = {
     };
   },
   async call(endpoint: string, options: RequestInit = {}) {
-    const adminSessionToken = localStorage.getItem("admin_session_token");
+    const adminSessionToken = localStorage.getItem(ADMIN_SESSION_TOKEN_KEY);
+    const adminCsrfToken = localStorage.getItem(ADMIN_CSRF_TOKEN_KEY);
+    const method = (options.method || "GET").toUpperCase();
+    const mutating =
+      method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       ...(adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}),
+      ...(mutating && adminCsrfToken ? { "X-Admin-CSRF": adminCsrfToken } : {}),
       ...options.headers,
     };
 
@@ -149,6 +156,10 @@ export const adminApi = {
         err.status = response.status;
         err.data = payload;
         throw err;
+      }
+
+      if (payload?.csrfToken && typeof payload.csrfToken === "string") {
+        localStorage.setItem(ADMIN_CSRF_TOKEN_KEY, payload.csrfToken);
       }
 
       return payload;

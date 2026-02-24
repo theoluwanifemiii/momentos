@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch scheduler.ts",
     "start": "node dist/scheduler.js",
-    "build": "tsc"
+    "build": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma && tsc",
+    "postinstall": "PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x npx prisma generate --schema=prisma/schema.prisma",
+    "verify:observability-env": "tsx scripts/verifyObservabilityEnv.ts",
+    "smoke:observability": "tsx scripts/observabilitySmokeTest.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",

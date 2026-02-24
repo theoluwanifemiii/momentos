@@ -78,6 +78,59 @@ app.get(
         where: { organizationId: orgId },
       });
 
+      const now = new Date();
+      const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const [failedLast24h, failedLast7d, failedByChannelLast24h, recentSystemErrors] =
+        await Promise.all([
+          prisma.deliveryLog.count({
+            where: {
+              organizationId: orgId,
+              status: "FAILED",
+              createdAt: { gte: since24h },
+            },
+          }),
+          prisma.deliveryLog.count({
+            where: {
+              organizationId: orgId,
+              status: "FAILED",
+              createdAt: { gte: since7d },
+            },
+          }),
+          prisma.deliveryLog.groupBy({
+            by: ["channel"],
+            where: {
+              organizationId: orgId,
+              status: "FAILED",
+              createdAt: { gte: since24h },
+            },
+            _count: {
+              _all: true,
+            },
+          }),
+          prisma.systemErrorLog.findMany({
+            where: {
+              OR: [{ organizationId: orgId }, { organizationId: null }],
+              createdAt: { gte: since7d },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          }),
+        ]);
+
+      const failedByChannel = {
+        email: 0,
+        sms: 0,
+        whatsapp: 0,
+      };
+      for (const row of failedByChannelLast24h) {
+        if (row.channel in failedByChannel) {
+          failedByChannel[row.channel as "email" | "sms" | "whatsapp"] =
+            row._count._all;
+        }
+      }
+
       // Get upcoming birthdays (next 7 days)
       const people = await prisma.person.findMany({
         where: {
@@ -129,6 +182,15 @@ app.get(
             successful: todaySuccessful,
             failed: todayFailed,
           },
+          deliveryFailures: {
+            last24h: failedLast24h,
+            last7d: failedLast7d,
+            byChannel24h: failedByChannel,
+          },
+          observability: {
+            recentErrorCount: recentSystemErrors.length,
+            lastErrorAt: recentSystemErrors[0]?.createdAt || null,
+          },
         },
         recentActivity: recentActivity.map((log) => ({
           id: log.id,
@@ -140,6 +202,14 @@ app.get(
           sentAt: log.sentAt,
           errorMessage: log.errorMessage,
           createdAt: log.createdAt,
+        })),
+        recentErrors: recentSystemErrors.map((item) => ({
+          id: item.id,
+          severity: item.severity,
+          category: item.category,
+          message: item.message,
+          channel: item.channel,
+          createdAt: item.createdAt,
         })),
       });
     } catch (err: any) {

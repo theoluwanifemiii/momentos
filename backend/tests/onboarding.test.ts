@@ -31,7 +31,7 @@ const createPrismaMock = (options: {
     person: {
       count: async () => options.peopleCount ?? 0,
     },
-    template: {
+    organizationTemplate: {
       findFirst: async () => options.defaultTemplate ?? null,
     },
     deliveryLog: {

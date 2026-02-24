@@ -3,6 +3,8 @@ import 'dotenv/config';
 import {
   DeliveryChannel,
   DeliveryStatus,
+  ErrorSeverity,
+  MomentRecurrence,
   Prisma,
   PrismaClient,
   TemplateType,
@@ -22,6 +24,10 @@ const NOTIFICATIONS_FROM_EMAIL = process.env.NOTIFICATIONS_FROM_EMAIL;
 const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const ALERT_EMAIL = process.env.ALERT_EMAIL || 'dev@usemomentos.xyz';
+const ALERT_FROM_NAME = process.env.ALERT_FROM_NAME || 'MomentOS Alerts';
+const FAILURE_ALERT_MIN_COUNT = Number(process.env.FAILURE_ALERT_MIN_COUNT || 1);
+const ALERT_COOLDOWN_MINUTES = Number(process.env.ALERT_COOLDOWN_MINUTES || 15);
 const extractDomain = (value?: string | null) => {
   if (!value) return null;
   const atIndex = value.lastIndexOf('@');
@@ -100,6 +106,23 @@ type OrganizationNotificationConfig = Pick<
   OrganizationForProcessing,
   'name' | 'emailFromAddress' | 'users'
 >;
+type TemplateRecord = {
+  id: string;
+  type: TemplateType;
+  subject: string;
+  content: string;
+  channels: DeliveryChannel[];
+};
+type MomentForProcessing = Prisma.MomentGetPayload<{
+  include: {
+    template: true;
+    recipients: {
+      include: {
+        person: true;
+      };
+    };
+  };
+}>;
 
 const escapeHtml = (value: string) =>
   value
@@ -212,9 +235,233 @@ class ResendEmailProvider implements EmailProvider {
 
 class BirthdayScheduler {
   private emailProvider: EmailProvider;
+  private alertCooldowns = new Map<string, number>();
 
   constructor(emailProvider: EmailProvider) {
     this.emailProvider = emailProvider;
+  }
+
+  private shouldSendAlert(key: string) {
+    const now = Date.now();
+    const cooldownMs = ALERT_COOLDOWN_MINUTES * 60 * 1000;
+    const lastSentAt = this.alertCooldowns.get(key) || 0;
+    if (now - lastSentAt < cooldownMs) {
+      return false;
+    }
+    this.alertCooldowns.set(key, now);
+    return true;
+  }
+
+  private isThrottleError(message?: string | null) {
+    if (!message) return false;
+    const text = message.toLowerCase();
+    return (
+      text.includes('429') ||
+      text.includes('rate limit') ||
+      text.includes('too many requests') ||
+      text.includes('throttle')
+    );
+  }
+
+  private async logSystemError(params: {
+    category: string;
+    message: string;
+    severity?: ErrorSeverity;
+    organizationId?: string | null;
+    channel?: DeliveryChannel | null;
+    metadata?: Prisma.InputJsonValue;
+  }) {
+    const severity = params.severity || ErrorSeverity.ERROR;
+    const prefix = `[${severity}] ${params.category}`;
+    console.error(prefix, params.message, params.metadata || '');
+
+    try {
+      await prisma.systemErrorLog.create({
+        data: {
+          source: 'worker.scheduler',
+          category: params.category,
+          severity,
+          message: params.message,
+          organizationId: params.organizationId || null,
+          channel: params.channel || null,
+          metadata: params.metadata,
+        },
+      });
+    } catch (error: any) {
+      console.error('Failed to persist system error log:', error?.message || error);
+    }
+  }
+
+  private async sendAlert(params: {
+    subject: string;
+    text: string;
+    html?: string;
+    alertKey: string;
+  }) {
+    if (!this.shouldSendAlert(params.alertKey)) {
+      return;
+    }
+
+    const fromEmail = resolveFromEmail(process.env.ALERT_FROM_EMAIL || DEFAULT_FROM_EMAIL);
+    if (!fromEmail) {
+      console.error('Alert email skipped: sender email is not configured.');
+      return;
+    }
+
+    try {
+      await this.emailProvider.send({
+        to: ALERT_EMAIL,
+        subject: params.subject,
+        text: params.text,
+        html: params.html,
+        from: {
+          name: ALERT_FROM_NAME,
+          email: fromEmail,
+        },
+      });
+    } catch (error: any) {
+      console.error('Failed to send alert email:', error?.message || error);
+    }
+  }
+
+  private async reportDeliveryFailure(params: {
+    org: OrganizationDeliveryConfig;
+    person: PersonRecord;
+    channel: DeliveryChannel;
+    templateId: string;
+    errorMessage: string;
+    momentId?: string | null;
+  }) {
+    const message = `Delivery failed on ${params.channel} for ${params.person.email} in organization ${params.org.name}.`;
+    await this.logSystemError({
+      category: 'delivery_failure',
+      message,
+      severity: ErrorSeverity.ERROR,
+      organizationId: params.org.id,
+      channel: params.channel,
+      metadata: {
+        organizationName: params.org.name,
+        personId: params.person.id,
+        personEmail: params.person.email,
+        templateId: params.templateId,
+        momentId: params.momentId || null,
+        errorMessage: params.errorMessage,
+      } as Prisma.InputJsonValue,
+    });
+
+    if (this.isThrottleError(params.errorMessage)) {
+      await this.logSystemError({
+        category: 'provider_throttle',
+        message: `Provider throttling detected on ${params.channel} for organization ${params.org.name}.`,
+        severity: ErrorSeverity.CRITICAL,
+        organizationId: params.org.id,
+        channel: params.channel,
+        metadata: {
+          errorMessage: params.errorMessage,
+        } as Prisma.InputJsonValue,
+      });
+
+      await this.sendAlert({
+        alertKey: `provider-throttle:${params.org.id}:${params.channel}`,
+        subject: `[MomentOS Alert] Provider throttling detected (${params.channel})`,
+        text: [
+          `Organization: ${params.org.name} (${params.org.id})`,
+          `Channel: ${params.channel}`,
+          `Person: ${params.person.fullName} <${params.person.email}>`,
+          `Error: ${params.errorMessage}`,
+          `Time: ${new Date().toISOString()}`,
+        ].join('\n'),
+      });
+    }
+  }
+
+  private async sendFailureCountAlert(params: {
+    org: OrganizationForProcessing;
+    runStartedAt: Date;
+  }) {
+    const failures = await prisma.deliveryLog.findMany({
+      where: {
+        organizationId: params.org.id,
+        status: DeliveryStatus.FAILED,
+        createdAt: {
+          gte: params.runStartedAt,
+        },
+      },
+      select: {
+        channel: true,
+        errorMessage: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
+    if (failures.length < FAILURE_ALERT_MIN_COUNT) {
+      return;
+    }
+
+    const byChannel = failures.reduce<Record<string, number>>((acc, log) => {
+      const key = log.channel || 'unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    await this.logSystemError({
+      category: 'delivery_failure_count',
+      message: `Scheduler run recorded ${failures.length} failed deliveries for ${params.org.name}.`,
+      severity: ErrorSeverity.ERROR,
+      organizationId: params.org.id,
+      metadata: {
+        runStartedAt: params.runStartedAt.toISOString(),
+        failures: failures.length,
+        byChannel,
+      } as Prisma.InputJsonValue,
+    });
+
+    const sampleLines = failures
+      .slice(0, 5)
+      .map(
+        (failure) =>
+          `- ${failure.channel} | ${failure.createdAt.toISOString()} | ${failure.errorMessage || 'No error message'}`
+      )
+      .join('\n');
+
+    await this.sendAlert({
+      alertKey: `delivery-failures:${params.org.id}`,
+      subject: `[MomentOS Alert] ${failures.length} delivery failures (${params.org.name})`,
+      text: [
+        `Organization: ${params.org.name} (${params.org.id})`,
+        `Run started: ${params.runStartedAt.toISOString()}`,
+        `Failure count: ${failures.length}`,
+        `By channel: ${JSON.stringify(byChannel)}`,
+        '',
+        'Recent failures:',
+        sampleLines || '- None',
+      ].join('\n'),
+    });
+  }
+
+  async reportSchedulerCrash(error: unknown, phase: string) {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    await this.logSystemError({
+      category: 'scheduler_crash',
+      message: `Scheduler failure during ${phase}: ${message}`,
+      severity: ErrorSeverity.CRITICAL,
+      metadata: {
+        phase,
+      } as Prisma.InputJsonValue,
+    });
+
+    await this.sendAlert({
+      alertKey: `scheduler-crash:${phase}`,
+      subject: `[MomentOS CRITICAL] Scheduler failure (${phase})`,
+      text: [
+        `Phase: ${phase}`,
+        `Time: ${new Date().toISOString()}`,
+        '',
+        message,
+      ].join('\n'),
+    });
   }
 
   private getOrgNow(timezone?: string | null) {
@@ -256,12 +503,37 @@ class BirthdayScheduler {
     };
   }
 
+  private isLeapYear(year: number) {
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  }
+
+  private isMomentDueToday(moment: MomentForProcessing, orgNow: DateTime) {
+    const eventDate = DateTime.fromJSDate(moment.eventDate, {
+      zone: orgNow.zone,
+    });
+
+    if (moment.recurrenceRule === MomentRecurrence.ONE_TIME) {
+      return eventDate.startOf('day').toISODate() === orgNow.startOf('day').toISODate();
+    }
+
+    if (moment.recurrenceRule === MomentRecurrence.ANNUAL) {
+      if (eventDate.month === 2 && eventDate.day === 29 && !this.isLeapYear(orgNow.year)) {
+        return orgNow.month === 2 && orgNow.day === 28;
+      }
+      return eventDate.month === orgNow.month && eventDate.day === orgNow.day;
+    }
+
+    // Custom recurrence is roadmap-only; skip until recurrence rules are implemented.
+    return false;
+  }
+
   private async logDelivery(params: {
     personId: string;
     templateId: string;
     organizationId: string;
     channel: DeliveryChannel;
     status: DeliveryStatus;
+    momentId?: string | null;
     externalId?: string | null;
     errorMessage?: string | null;
   }) {
@@ -274,6 +546,7 @@ class BirthdayScheduler {
         personId: params.personId,
         templateId: params.templateId,
         organizationId: params.organizationId,
+        momentId: params.momentId || null,
         channel: params.channel,
         status: params.status,
         scheduledFor: now,
@@ -289,6 +562,7 @@ class BirthdayScheduler {
     organizationId: string;
     personId: string;
     channel: DeliveryChannel;
+    momentId?: string | null;
     orgNow: DateTime;
   }) {
     const dayStartUtc = params.orgNow.startOf('day').toUTC().toJSDate();
@@ -299,6 +573,8 @@ class BirthdayScheduler {
         organizationId: params.organizationId,
         personId: params.personId,
         channel: params.channel,
+        momentId:
+          params.momentId === undefined ? undefined : params.momentId || null,
         status: { in: DEDUPE_STATUSES },
         scheduledFor: {
           gte: dayStartUtc,
@@ -420,18 +696,19 @@ From everyone at {{organization_name}}`,
   private async sendEmailChannel(params: {
     person: PersonRecord;
     org: OrganizationDeliveryConfig;
-    templateAssignment: TemplateAssignmentWithTemplate;
+    template: TemplateRecord;
     subject: string;
     content: string;
     orgNow: DateTime;
+    momentId?: string | null;
   }) {
-    const { person, org, templateAssignment, subject, content, orgNow } = params;
-    const template = templateAssignment.template;
+    const { person, org, template, subject, content, orgNow, momentId } = params;
 
     const alreadySent = await this.alreadySentToday({
       organizationId: org.id,
       personId: person.id,
       channel: DeliveryChannel.email,
+      momentId,
       orgNow,
     });
 
@@ -448,8 +725,17 @@ From everyone at {{organization_name}}`,
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.email,
         status: DeliveryStatus.FAILED,
+        errorMessage: 'Sender email is not configured',
+      });
+      await this.reportDeliveryFailure({
+        org,
+        person,
+        channel: DeliveryChannel.email,
+        templateId: template.id,
+        momentId,
         errorMessage: 'Sender email is not configured',
       });
       return;
@@ -471,18 +757,39 @@ From everyone at {{organization_name}}`,
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.email,
         status: result.success ? DeliveryStatus.DELIVERED : DeliveryStatus.FAILED,
         externalId: result.id,
       });
+      if (!result.success) {
+        await this.reportDeliveryFailure({
+          org,
+          person,
+          channel: DeliveryChannel.email,
+          templateId: template.id,
+          momentId,
+          errorMessage: 'Email provider returned failure status',
+        });
+      }
     } catch (error: any) {
+      const errorMessage = error?.message || 'Email send failed';
       await this.logDelivery({
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.email,
         status: DeliveryStatus.FAILED,
-        errorMessage: error?.message || 'Email send failed',
+        errorMessage,
+      });
+      await this.reportDeliveryFailure({
+        org,
+        person,
+        channel: DeliveryChannel.email,
+        templateId: template.id,
+        momentId,
+        errorMessage,
       });
     }
   }
@@ -490,12 +797,12 @@ From everyone at {{organization_name}}`,
   private async sendSmsChannel(params: {
     person: PersonRecord;
     org: OrganizationDeliveryConfig;
-    templateAssignment: TemplateAssignmentWithTemplate;
+    template: TemplateRecord;
     content: string;
     orgNow: DateTime;
+    momentId?: string | null;
   }) {
-    const { person, org, templateAssignment, content, orgNow } = params;
-    const template = templateAssignment.template;
+    const { person, org, template, content, orgNow, momentId } = params;
 
     if (!org.smsEnabled || !person.phone) {
       return;
@@ -505,6 +812,7 @@ From everyone at {{organization_name}}`,
       organizationId: org.id,
       personId: person.id,
       channel: DeliveryChannel.sms,
+      momentId,
       orgNow,
     });
 
@@ -524,19 +832,40 @@ From everyone at {{organization_name}}`,
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.sms,
         status: smsResult.success ? DeliveryStatus.DELIVERED : DeliveryStatus.FAILED,
         externalId: smsResult.messageId,
         errorMessage: smsResult.error,
       });
+      if (!smsResult.success) {
+        await this.reportDeliveryFailure({
+          org,
+          person,
+          channel: DeliveryChannel.sms,
+          templateId: template.id,
+          momentId,
+          errorMessage: smsResult.error || 'SMS provider returned failure status',
+        });
+      }
     } catch (error: any) {
+      const errorMessage = error?.message || 'SMS send failed';
       await this.logDelivery({
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.sms,
         status: DeliveryStatus.FAILED,
-        errorMessage: error?.message || 'SMS send failed',
+        errorMessage,
+      });
+      await this.reportDeliveryFailure({
+        org,
+        person,
+        channel: DeliveryChannel.sms,
+        templateId: template.id,
+        momentId,
+        errorMessage,
       });
     }
   }
@@ -544,13 +873,13 @@ From everyone at {{organization_name}}`,
   private async sendWhatsappChannel(params: {
     person: PersonRecord;
     org: OrganizationDeliveryConfig;
-    templateAssignment: TemplateAssignmentWithTemplate;
+    template: TemplateRecord;
     subject: string;
     content: string;
     orgNow: DateTime;
+    momentId?: string | null;
   }) {
-    const { person, org, templateAssignment, subject, content, orgNow } = params;
-    const template = templateAssignment.template;
+    const { person, org, template, subject, content, orgNow, momentId } = params;
 
     if (!org.whatsappEnabled || !person.phone) {
       return;
@@ -560,6 +889,7 @@ From everyone at {{organization_name}}`,
       organizationId: org.id,
       personId: person.id,
       channel: DeliveryChannel.whatsapp,
+      momentId,
       orgNow,
     });
 
@@ -580,6 +910,7 @@ From everyone at {{organization_name}}`,
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.whatsapp,
         status: whatsappResult.success
           ? DeliveryStatus.DELIVERED
@@ -587,14 +918,34 @@ From everyone at {{organization_name}}`,
         externalId: whatsappResult.messageId,
         errorMessage: whatsappResult.error,
       });
+      if (!whatsappResult.success) {
+        await this.reportDeliveryFailure({
+          org,
+          person,
+          channel: DeliveryChannel.whatsapp,
+          templateId: template.id,
+          momentId,
+          errorMessage: whatsappResult.error || 'WhatsApp provider returned failure status',
+        });
+      }
     } catch (error: any) {
+      const errorMessage = error?.message || 'WhatsApp send failed';
       await this.logDelivery({
         personId: person.id,
         templateId: template.id,
         organizationId: org.id,
+        momentId,
         channel: DeliveryChannel.whatsapp,
         status: DeliveryStatus.FAILED,
-        errorMessage: error?.message || 'WhatsApp send failed',
+        errorMessage,
+      });
+      await this.reportDeliveryFailure({
+        org,
+        person,
+        channel: DeliveryChannel.whatsapp,
+        templateId: template.id,
+        momentId,
+        errorMessage,
       });
     }
   }
@@ -656,27 +1007,92 @@ From everyone at {{organization_name}}`,
         await this.sendEmailChannel({
           person,
           org,
-          templateAssignment,
+          template,
           subject,
           content,
           orgNow,
+          momentId: null,
         });
       } else if (channel === DeliveryChannel.sms) {
         await this.sendSmsChannel({
           person,
           org,
-          templateAssignment,
+          template,
           content,
           orgNow,
+          momentId: null,
         });
       } else if (channel === DeliveryChannel.whatsapp) {
         await this.sendWhatsappChannel({
           person,
           org,
-          templateAssignment,
+          template,
           subject,
           content,
           orgNow,
+          momentId: null,
+        });
+      }
+    }
+  }
+
+  async sendMomentMessage(params: {
+    person: PersonRecord;
+    org: OrganizationDeliveryConfig;
+    moment: MomentForProcessing;
+    template: TemplateRecord;
+    orgNow: DateTime;
+  }) {
+    const { person, org, moment, template, orgNow } = params;
+    const variables = {
+      first_name: person.firstName || person.fullName.split(' ')[0],
+      full_name: person.fullName,
+      organization_name: org.name,
+      date: new Date().toLocaleDateString(),
+      moment_title: moment.title,
+      moment_category: moment.category,
+      event_date: DateTime.fromJSDate(moment.eventDate, { zone: orgNow.zone }).toISODate() ||
+        '',
+      personalized_intro: '',
+    };
+
+    const subject = this.interpolateTemplate(template.subject, variables);
+    const content = this.interpolateTemplate(template.content, variables);
+    const channels = moment.deliveryChannels.length
+      ? moment.deliveryChannels
+      : template.channels.length
+      ? template.channels
+      : [DeliveryChannel.email];
+
+    for (const channel of channels) {
+      if (channel === DeliveryChannel.email) {
+        await this.sendEmailChannel({
+          person,
+          org,
+          template,
+          subject,
+          content,
+          orgNow,
+          momentId: moment.id,
+        });
+      } else if (channel === DeliveryChannel.sms) {
+        await this.sendSmsChannel({
+          person,
+          org,
+          template,
+          content,
+          orgNow,
+          momentId: moment.id,
+        });
+      } else if (channel === DeliveryChannel.whatsapp) {
+        await this.sendWhatsappChannel({
+          person,
+          org,
+          template,
+          subject,
+          content,
+          orgNow,
+          momentId: moment.id,
         });
       }
     }
@@ -729,6 +1145,7 @@ From everyone at {{organization_name}}`,
 
   async processOrganization(orgId: string) {
     console.log(`Processing organization: ${orgId}`);
+    const runStartedAt = new Date();
 
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -742,6 +1159,20 @@ From everyone at {{organization_name}}`,
         },
         users: {
           select: { email: true },
+        },
+        moments: {
+          where: {
+            status: 'ACTIVE',
+            ownerOrganizationId: orgId,
+          },
+          include: {
+            template: true,
+            recipients: {
+              include: {
+                person: true,
+              },
+            },
+          },
         },
       },
     });
@@ -784,6 +1215,12 @@ From everyone at {{organization_name}}`,
         return;
       }
       console.error(`Failed to create run lock for ${org.id}:`, error?.message);
+      await this.logSystemError({
+        category: 'scheduler_run_lock_failed',
+        message: `Failed to create scheduler run lock for organization ${org.id}: ${error?.message || error}`,
+        severity: ErrorSeverity.ERROR,
+        organizationId: org.id,
+      });
       return;
     }
 
@@ -801,6 +1238,38 @@ From everyone at {{organization_name}}`,
       await this.sendBirthdayMessage(person, org, templateAssignments, orgNow);
     }
 
+    const defaultTemplate = (
+      templateAssignments.find((assignment) => assignment.isDefault) ||
+      templateAssignments[0]
+    )?.template as TemplateRecord | undefined;
+
+    const dueMoments = org.moments.filter((moment) =>
+      this.isMomentDueToday(moment as MomentForProcessing, orgNow)
+    );
+    console.log(`Found ${dueMoments.length} due moments for organization ${org.id}`);
+
+    for (const moment of dueMoments) {
+      const messageTemplate = (moment.template as TemplateRecord | null) || defaultTemplate;
+      if (!messageTemplate) {
+        console.warn(`Skipping moment ${moment.id}; no template available.`);
+        continue;
+      }
+
+      for (const recipient of moment.recipients) {
+        if (!recipient.person || recipient.person.optedOut) {
+          continue;
+        }
+
+        await this.sendMomentMessage({
+          person: recipient.person as PersonRecord,
+          org,
+          moment: moment as MomentForProcessing,
+          template: messageTemplate,
+          orgNow,
+        });
+      }
+    }
+
     await prisma.organization.update({
       where: { id: org.id },
       data: { birthdayLastRunAt: new Date() },
@@ -813,6 +1282,11 @@ From everyone at {{organization_name}}`,
     if (upcomingBirthdays.length > 0) {
       await this.sendAdminNotification(upcomingBirthdays, org);
     }
+
+    await this.sendFailureCountAlert({
+      org,
+      runStartedAt,
+    });
   }
 
   private shouldRunForOrg(org: {
@@ -854,7 +1328,19 @@ From everyone at {{organization_name}}`,
 
     for (const org of organizations) {
       if (this.shouldRunForOrg(org)) {
-        await this.processOrganization(org.id);
+        try {
+          await this.processOrganization(org.id);
+        } catch (error: any) {
+          await this.logSystemError({
+            category: 'organization_run_failed',
+            message: `Organization run failed for ${org.id}: ${error?.message || error}`,
+            severity: ErrorSeverity.ERROR,
+            organizationId: org.id,
+            metadata: {
+              stack: error?.stack || null,
+            } as Prisma.InputJsonValue,
+          });
+        }
       }
     }
 
@@ -866,11 +1352,17 @@ From everyone at {{organization_name}}`,
 
     cron.schedule('* * * * *', async () => {
       console.log(`Running scheduled birthday check: ${new Date().toISOString()}`);
-      await this.run();
+      try {
+        await this.run();
+      } catch (error) {
+        await this.reportSchedulerCrash(error, 'cron_tick');
+      }
     });
 
     console.log('Running initial check.');
-    void this.run();
+    void this.run().catch(async (error) => {
+      await this.reportSchedulerCrash(error, 'initial_run');
+    });
   }
 }
 
@@ -879,8 +1371,36 @@ const scheduler = new BirthdayScheduler(emailProvider);
 
 scheduler.startCron();
 
-process.on('SIGINT', async () => {
+let shuttingDown = false;
+
+const shutdown = async (exitCode: number) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log('Shutting down scheduler.');
   await prisma.$disconnect();
-  process.exit(0);
+  process.exit(exitCode);
+};
+
+process.on('SIGINT', async () => {
+  await shutdown(0);
+});
+
+process.on('SIGTERM', async () => {
+  await shutdown(0);
+});
+
+process.on('uncaughtException', (error) => {
+  void (async () => {
+    await scheduler.reportSchedulerCrash(error, 'uncaught_exception');
+    await shutdown(1);
+  })();
+});
+
+process.on('unhandledRejection', (reason) => {
+  void (async () => {
+    const error =
+      reason instanceof Error ? reason : new Error(`Unhandled rejection: ${String(reason)}`);
+    await scheduler.reportSchedulerCrash(error, 'unhandled_rejection');
+    await shutdown(1);
+  })();
 });

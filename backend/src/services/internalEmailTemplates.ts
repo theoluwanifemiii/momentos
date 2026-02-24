@@ -39,6 +39,32 @@ export function otpTemplate(params: { code: string; ttlMinutes: number; purpose:
   return { subject, html, text };
 }
 
+export function verifyEmailLinkTemplate(params: {
+  verifyUrl: string;
+  ttlMinutes: number;
+}): TemplatePayload {
+  const subject = 'Verify your MomentOS account';
+  const text = `Confirm your email by clicking this link: ${params.verifyUrl}\n\nThis link expires in ${params.ttlMinutes} minutes.`;
+  const html = `<div style="font-family: Arial, sans-serif; background: #f8fafc; padding: 24px;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden;">
+    <div style="background: #111827; color: #ffffff; padding: 20px 24px;">
+      <h1 style="margin: 0; font-size: 20px;">MomentOS</h1>
+    </div>
+    <div style="padding: 24px;">
+      <p style="margin: 0 0 16px; font-size: 16px; color: #111827;">Verify your account</p>
+      <p style="margin: 0 0 20px; color: #6b7280;">Click the button below to confirm your email address. This link expires in ${params.ttlMinutes} minutes.</p>
+      <p style="margin: 0 0 20px;">
+        <a href="${params.verifyUrl}" style="background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 18px; border-radius: 8px; display: inline-block; font-weight: 600;">Verify email</a>
+      </p>
+      <p style="margin: 0; color: #6b7280; font-size: 12px;">If the button doesn’t work, paste this link into your browser:</p>
+      <p style="margin: 8px 0 0; word-break: break-all; color: #2563eb; font-size: 12px;">${params.verifyUrl}</p>
+    </div>
+  </div>
+</div>`;
+
+  return { subject, html, text };
+}
+
 export function welcomeTemplate(params: {
   organizationName: string;
   recipientName?: string;

@@ -5,17 +5,24 @@ import jwt from "jsonwebtoken";
 import { z, ZodError } from "zod";
 import { createHash } from "crypto";
 import { EmailService } from "../services/emailService";
+import { createRateLimiter } from "../middleware/security";
 import {
+  verifyEmailLinkTemplate,
   waitlistWelcomeTemplate,
   welcomeTemplate,
 } from "../services/internalEmailTemplates";
 import {
+  APP_URL,
   ADMIN_BOOTSTRAP_TOKEN,
+  ADMIN_CSRF_COOKIE,
   ADMIN_EMAIL_DOMAIN,
   ADMIN_SESSION_COOKIE,
   AdminAuthRequest,
   AdminRoleType,
+  DEFAULT_FROM_EMAIL,
+  DEFAULT_FROM_NAME,
   JWT_SECRET,
+  VERIFY_LINK_TTL_MINUTES,
   WELCOME_FROM_EMAIL,
   WELCOME_FROM_NAME,
   WELCOME_REPLY_TO,
@@ -35,8 +42,97 @@ import {
   logAdminAction,
 } from "../serverContext";
 
+const buildAppUrl = (path: string) => {
+  const base = APP_URL.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
+};
+
+const sendVerificationLink = async (params: {
+  user: { id: string; email: string; organizationId: string };
+}) => {
+  const token = jwt.sign(
+    {
+      userId: params.user.id,
+      email: params.user.email,
+      purpose: "REGISTER_VERIFY",
+    },
+    JWT_SECRET,
+    { expiresIn: `${VERIFY_LINK_TTL_MINUTES}m` }
+  );
+
+  const verifyUrl = `${buildAppUrl("/verify")}?token=${encodeURIComponent(token)}`;
+  const fromEmail = resolveFromEmail(DEFAULT_FROM_EMAIL);
+  const fromName = DEFAULT_FROM_NAME || "MomentOS";
+
+  if (!fromEmail) {
+    throw new Error("DEFAULT_FROM_EMAIL is not configured");
+  }
+
+  const { subject, text, html } = verifyEmailLinkTemplate({
+    verifyUrl,
+    ttlMinutes: VERIFY_LINK_TTL_MINUTES,
+  });
+
+  await EmailService.send({
+    to: params.user.email,
+    subject,
+    text,
+    html,
+    from: {
+      name: fromName,
+      email: fromEmail,
+    },
+  });
+};
+
+const authLoginRateLimit = createRateLimiter({
+  keyPrefix: "auth-login",
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+});
+
+const authRegisterRateLimit = createRateLimiter({
+  keyPrefix: "auth-register",
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+});
+
+const authVerifyRateLimit = createRateLimiter({
+  keyPrefix: "auth-verify",
+  windowMs: 10 * 60 * 1000,
+  max: 6,
+});
+
+const authForgotPasswordRateLimit = createRateLimiter({
+  keyPrefix: "auth-forgot",
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+});
+
+const authResetPasswordRateLimit = createRateLimiter({
+  keyPrefix: "auth-reset",
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+});
+
+const adminAuthRateLimit = createRateLimiter({
+  keyPrefix: "admin-auth",
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+});
+
+const adminBootstrapRateLimit = createRateLimiter({
+  keyPrefix: "admin-bootstrap",
+  windowMs: 10 * 60 * 1000,
+  max: 3,
+});
+
 export function registerAuthRoutes(app: Express) {
-  app.post("/api/internal/admin/auth/login", async (req: Request, res: Response) => {
+  app.post(
+    "/api/internal/admin/auth/login",
+    adminAuthRateLimit,
+    async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         email: z.string().email(),
@@ -68,7 +164,7 @@ export function registerAuthRoutes(app: Express) {
         data: { lastLoginAt: new Date() },
       });
 
-      const sessionToken = await createAdminSession(
+      const session = await createAdminSession(
         admin.id,
         admin.role as AdminRoleType,
         req,
@@ -81,17 +177,20 @@ export function registerAuthRoutes(app: Express) {
           email: admin.email,
           role: admin.role,
         },
-        sessionToken,
+        sessionToken: session.sessionToken,
+        csrfToken: session.csrfToken,
       });
     } catch (err: any) {
       res
         .status(400)
         .json({ error: getUserErrorMessage(err, "Admin login failed") });
     }
-  });
+    }
+  );
 
   app.post(
     "/api/internal/admin/auth/bootstrap",
+    adminBootstrapRateLimit,
     async (req: Request, res: Response) => {
       try {
         const schema = z.object({
@@ -151,6 +250,7 @@ export function registerAuthRoutes(app: Express) {
 
   app.post(
     "/api/internal/admin/auth/register",
+    adminAuthRateLimit,
     async (req: Request, res: Response) => {
       try {
         const schema = z.object({
@@ -236,6 +336,7 @@ export function registerAuthRoutes(app: Express) {
           (typeof headerToken === "string" ? headerToken : undefined);
         await revokeAdminSession(token);
         res.clearCookie(ADMIN_SESSION_COOKIE);
+        res.clearCookie(ADMIN_CSRF_COOKIE);
         res.json({ success: true });
       } catch (err: any) {
         res
@@ -252,7 +353,10 @@ export function registerAuthRoutes(app: Express) {
     async (req: AdminAuthRequest, res: Response) => {
       const cached = adminUserCache.get(req.adminId!);
       if (cached && cached.expiresAt > Date.now()) {
-        return res.json({ admin: cached.admin });
+        return res.json({
+          admin: cached.admin,
+          csrfToken: req.cookies?.[ADMIN_CSRF_COOKIE] || null,
+        });
       }
 
       const admin = await prisma.adminUser.findUnique({
@@ -273,11 +377,14 @@ export function registerAuthRoutes(app: Express) {
         expiresAt: Date.now() + 30_000,
       });
 
-      res.json({ admin: payload });
+      res.json({
+        admin: payload,
+        csrfToken: req.cookies?.[ADMIN_CSRF_COOKIE] || null,
+      });
     }
   );
 
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
+  app.post("/api/auth/register", authRegisterRateLimit, async (req: Request, res: Response) => {
     const requestId = req.headers["x-request-id"]?.toString();
     let safeEmail: string | undefined;
 
@@ -338,16 +445,7 @@ export function registerAuthRoutes(app: Express) {
 
       const user = org.users[0];
 
-      await otpService.createAndSendOtp({
-        email: user.email,
-        userId: user.id,
-        purpose: OtpPurpose.REGISTER_VERIFY,
-        organization: {
-          name: org.name,
-          emailFromAddress: org.emailFromAddress,
-        },
-        asyncSend: true,
-      });
+      await sendVerificationLink({ user });
 
       console.log("Register outcome:", {
         email: safeEmail,
@@ -368,7 +466,7 @@ export function registerAuthRoutes(app: Express) {
           timezone: org.timezone,
         },
         requiresVerification: true,
-        message: "Verification code sent to your email.",
+        message: "Verification link sent to your email.",
       });
     } catch (err: any) {
       console.error("Register outcome:", {
@@ -383,7 +481,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", authLoginRateLimit, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         email: z.string().email(),
@@ -461,7 +559,11 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const token = jwt.sign(
-        { userId: user.id, organizationId: user.organizationId },
+        {
+          userId: user.id,
+          organizationId: user.organizationId,
+          userRole: user.role,
+        },
         JWT_SECRET,
         { expiresIn: "7d" }
       );
@@ -485,7 +587,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/verify/send", async (req: Request, res: Response) => {
+  app.post("/api/auth/verify/send", authVerifyRateLimit, async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         email: z.string().email(),
@@ -499,18 +601,12 @@ export function registerAuthRoutes(app: Express) {
       });
 
       if (user && !user.emailVerifiedAt) {
-        await otpService.createAndSendOtp({
-          email: user.email,
-          userId: user.id,
-          purpose: OtpPurpose.REGISTER_VERIFY,
-          organization: user.organization,
-          asyncSend: true,
-        });
+        await sendVerificationLink({ user });
       }
 
       res.json({
         success: true,
-        message: "If the account exists, a code was sent.",
+        message: "If the account exists, a verification link was sent.",
       });
     } catch (err: any) {
       res.status(400).json({ error: getUserErrorMessage(err) });
@@ -520,30 +616,39 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/verify", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        email: z.string().email(),
-        code: z.string().min(4),
+        token: z.string().min(20),
       });
 
-      const { email, code } = schema.parse(req.body);
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      const { token } = schema.parse(req.body);
+      let payload: { userId: string; email: string; purpose?: string };
+      try {
+        payload = jwt.verify(token, JWT_SECRET) as {
+          userId: string;
+          email: string;
+          purpose?: string;
+        };
+      } catch {
+        return res
+          .status(400)
+          .json({ error: "Verification link is invalid or expired" });
+      }
+
+      if (payload.purpose !== "REGISTER_VERIFY") {
+        return res.status(400).json({ error: "Verification link is invalid" });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: payload.userId } });
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      if (user.emailVerifiedAt) {
-        return res.json({ success: true, message: "Account already verified" });
+      if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
+        return res.status(400).json({ error: "Verification link is invalid" });
       }
 
-      const result = await otpService.verifyOtpCode({
-        email: normalizedEmail,
-        purpose: OtpPurpose.REGISTER_VERIFY,
-        code,
-      });
-
-      if (!result.valid) {
-        return res.status(400).json({ error: result.reason });
+      if (user.emailVerifiedAt) {
+        return res.json({ success: true, message: "Account already verified" });
       }
 
       await prisma.user.update({
@@ -586,7 +691,10 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/password/forgot", async (req: Request, res: Response) => {
+  app.post(
+    "/api/auth/password/forgot",
+    authForgotPasswordRateLimit,
+    async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         email: z.string().email(),
@@ -618,7 +726,10 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/password/reset", async (req: Request, res: Response) => {
+  app.post(
+    "/api/auth/password/reset",
+    authResetPasswordRateLimit,
+    async (req: Request, res: Response) => {
     try {
       const schema = z.object({
         email: z.string().email(),

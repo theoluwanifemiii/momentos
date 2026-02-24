@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient, OtpPurpose, Prisma } from "@prisma/client";
+import { PrismaClient, OtpPurpose, Prisma, UserRole } from "@prisma/client";
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -69,6 +69,7 @@ export const ADMIN_SESSION_TTL_DAYS = Number(
   process.env.ADMIN_SESSION_TTL_DAYS || 7
 );
 export const ADMIN_SESSION_COOKIE = "admin_session";
+export const ADMIN_CSRF_COOKIE = "admin_csrf";
 export const ADMIN_BOOTSTRAP_TOKEN = process.env.ADMIN_BOOTSTRAP_TOKEN || "";
 export const ADMIN_INVITE_TTL_HOURS = Number(
   process.env.ADMIN_INVITE_TTL_HOURS || 24
@@ -81,6 +82,11 @@ export const ADMIN_APP_URL =
   process.env.ADMIN_APP_URL ||
   process.env.FRONTEND_URL ||
   "http://localhost:5173";
+export const APP_URL =
+  process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:5173";
+export const VERIFY_LINK_TTL_MINUTES = Number(
+  process.env.VERIFY_LINK_TTL_MINUTES || 60
+);
 
 export function getUserErrorMessage(
   error: any,
@@ -341,8 +347,9 @@ export async function createAdminSession(
   req: Request,
   res: Response
 ) {
-  const token = randomBytes(32).toString("hex");
-  const tokenHash = hashToken(token);
+  const sessionToken = randomBytes(32).toString("hex");
+  const csrfToken = randomBytes(24).toString("hex");
+  const tokenHash = hashToken(sessionToken);
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + ADMIN_SESSION_TTL_DAYS);
 
@@ -372,14 +379,24 @@ export async function createAdminSession(
   // Secure + SameSite=None for any non-local host to keep session cookies attached.
   const secureCookie = isProd && !isLocalHost;
 
-  res.cookie(ADMIN_SESSION_COOKIE, token, {
+  res.cookie(ADMIN_SESSION_COOKIE, sessionToken, {
     httpOnly: true,
     sameSite: secureCookie ? "none" : "lax",
     secure: secureCookie,
     maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
   });
 
-  return token;
+  res.cookie(ADMIN_CSRF_COOKIE, csrfToken, {
+    httpOnly: false,
+    sameSite: secureCookie ? "none" : "lax",
+    secure: secureCookie,
+    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+  });
+
+  return {
+    sessionToken,
+    csrfToken,
+  };
 }
 
 export async function revokeAdminSession(token?: string) {
@@ -438,6 +455,7 @@ export async function createAdminInvite(params: {
 export interface AuthRequest extends Request {
   userId?: string;
   organizationId?: string;
+  userRole?: UserRole;
 }
 
 export interface AdminAuthRequest extends Request {
@@ -460,9 +478,11 @@ export async function authenticate(
     const decoded = jwt.verify(token, JWT_SECRET as jwt.Secret) as unknown as {
       userId: string;
       organizationId: string;
+      userRole?: UserRole;
     };
     req.userId = decoded.userId;
     req.organizationId = decoded.organizationId;
+    req.userRole = decoded.userRole;
 
     next();
   } catch (err) {

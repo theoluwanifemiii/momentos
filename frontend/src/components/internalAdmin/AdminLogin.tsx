@@ -21,6 +21,9 @@ export default function AdminLogin() {
       if (data?.sessionToken) {
         localStorage.setItem("admin_session_token", data.sessionToken);
       }
+      if (data?.csrfToken) {
+        localStorage.setItem("admin_csrf_token", data.csrfToken);
+      }
       navigate("/admin", { replace: true });
     } catch (err: any) {
       setError(err.message || "Login failed");

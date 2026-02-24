@@ -7,6 +7,7 @@ const UpcomingBirthdays = lazy(() => import('./people/UpcomingBirthdays.tsx'));
 const Templates = lazy(() => import('./Templates.tsx'));
 const Settings = lazy(() => import('./Settings.tsx'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard.tsx'));
+const Moments = lazy(() => import('./Moments.tsx'));
 
 type DashboardProps = {
   user: any;
@@ -18,7 +19,7 @@ type DashboardProps = {
 
 // Dashboard: tabbed navigation for people, templates, and uploads.
 export default function Dashboard({ onLogout, api }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'settings'>('dashboard');
   const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [guidedMode, setGuidedMode] = useState(false);
 
@@ -130,6 +131,16 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
             Email Templates
           </button>
           <button
+            onClick={() => setActiveTab('moments')}
+            className={`pb-2 px-4 ${
+              activeTab === 'moments'
+                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Moments
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`pb-2 px-4 ${
               activeTab === 'settings'
@@ -201,6 +212,11 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
             />
+          </Suspense>
+        )}
+        {activeTab === 'moments' && (
+          <Suspense fallback={renderFallback('moments')}>
+            <Moments api={api} />
           </Suspense>
         )}
       </main>

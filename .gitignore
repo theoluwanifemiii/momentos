@@ -11,6 +11,9 @@ build/
 .env.local
 .env.*.local
 
+# Local AI workspace
+.ai/
+
 # Database
 *.db
 *.sqlite

@@ -1,9 +1,11 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { api } from './api';
 
 const LandingPage = lazy(() => import('./components/LandingPage.tsx'));
+const ChangelogPage = lazy(() => import('./components/ChangelogPage.tsx'));
 const Dashboard = lazy(() => import('./components/Dashboard.tsx'));
 const LoginForm = lazy(() => import('./components/auth/LoginForm.tsx'));
 const RegisterForm = lazy(() => import('./components/auth/RegisterForm.tsx'));
@@ -53,162 +55,166 @@ export default function MomentOSApp() {
   );
 
   return (
-    <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <LandingPage
-              onLogin={() => navigate('/login')}
-              onRegister={() => navigate('/register')}
-            />
-          }
-        />
-        <Route
-          path="/login"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <AuthLayout>
-                <LoginForm
-                  onSuccess={(data) => {
-                    localStorage.setItem('token', data.token);
-                    setUser(data.user);
-                    setIsAuthenticated(true);
-                    navigate('/app');
-                  }}
-                  onRequireVerification={(email: string) => {
-                    setPendingEmail(email);
-                    navigate('/verify');
-                  }}
-                  onSwitchToRegister={() => navigate('/register')}
-                  onForgotPassword={() => navigate('/forgot')}
-                />
-              </AuthLayout>
-            )
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <AuthLayout>
-                <RegisterForm
-                  onSuccess={(data, email: string) => {
-                    if (data.requiresVerification) {
+    <>
+      <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <LandingPage
+                onLogin={() => navigate('/login')}
+                onRegister={() => navigate('/register')}
+              />
+            }
+          />
+          <Route path="/changelog" element={<ChangelogPage />} />
+          <Route
+            path="/login"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/app" replace />
+              ) : (
+                <AuthLayout>
+                  <LoginForm
+                    onSuccess={(data) => {
+                      localStorage.setItem('token', data.token);
+                      setUser(data.user);
+                      setIsAuthenticated(true);
+                      navigate('/app');
+                    }}
+                    onRequireVerification={(email: string) => {
                       setPendingEmail(email);
                       navigate('/verify');
-                      return;
-                    }
-                    localStorage.setItem('token', data.token);
-                    setUser(data.user);
-                    setIsAuthenticated(true);
-                    navigate('/app');
-                  }}
-                  onSwitchToLogin={() => navigate('/login')}
-                />
-              </AuthLayout>
-            )
-          }
-        />
-        <Route
-          path="/verify"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <AuthLayout>
-                <VerifyForm
-                  email={pendingEmail}
-                  onSuccess={() => navigate('/login')}
-                  onBackToLogin={() => navigate('/login')}
-                />
-              </AuthLayout>
-            )
-          }
-        />
-        <Route
-          path="/forgot"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <AuthLayout>
-                <ForgotPasswordForm
-                  onSuccess={(email: string) => {
-                    setPendingEmail(email);
-                    navigate('/reset');
-                  }}
-                  onBackToLogin={() => navigate('/login')}
-                />
-              </AuthLayout>
-            )
-          }
-        />
-        <Route
-          path="/reset"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <AuthLayout>
-                <ResetPasswordForm
-                  email={pendingEmail}
-                  onSuccess={() => navigate('/login')}
-                  onBackToLogin={() => navigate('/login')}
-                />
-              </AuthLayout>
-            )
-          }
-        />
-        <Route
-          path="/app"
-          element={
-            isAuthenticated ? (
-              <Dashboard user={user} onLogout={handleLogout} api={api} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/admin/login"
-          element={
-            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-              <AdminLogin />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/admin/register"
-          element={
-            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-              <AdminRegister />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
-              <AdminLayout />
-            </Suspense>
-          }
-        >
-          <Route index element={<AdminOverview />} />
-          <Route path="orgs" element={<AdminOrganizations />} />
-          <Route path="orgs/:id" element={<AdminOrganizationDetail />} />
-          <Route path="staff" element={<AdminStaff />} />
-          <Route path="people" element={<AdminPeople />} />
-          <Route path="templates" element={<AdminTemplates />} />
-          <Route path="delivery-logs" element={<AdminDeliveryLogs />} />
-          <Route path="audit-logs" element={<AdminAuditLogs />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+                    }}
+                    onSwitchToRegister={() => navigate('/register')}
+                    onForgotPassword={() => navigate('/forgot')}
+                  />
+                </AuthLayout>
+              )
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/app" replace />
+              ) : (
+                <AuthLayout>
+                  <RegisterForm
+                    onSuccess={(data, email: string) => {
+                      if (data.requiresVerification) {
+                        setPendingEmail(email);
+                        navigate('/verify');
+                        return;
+                      }
+                      localStorage.setItem('token', data.token);
+                      setUser(data.user);
+                      setIsAuthenticated(true);
+                      navigate('/app');
+                    }}
+                    onSwitchToLogin={() => navigate('/login')}
+                  />
+                </AuthLayout>
+              )
+            }
+          />
+          <Route
+            path="/verify"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/app" replace />
+              ) : (
+                <AuthLayout>
+                  <VerifyForm
+                    email={pendingEmail}
+                    onSuccess={() => navigate('/login')}
+                    onBackToLogin={() => navigate('/login')}
+                  />
+                </AuthLayout>
+              )
+            }
+          />
+          <Route
+            path="/forgot"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/app" replace />
+              ) : (
+                <AuthLayout>
+                  <ForgotPasswordForm
+                    onSuccess={(email: string) => {
+                      setPendingEmail(email);
+                      navigate('/reset');
+                    }}
+                    onBackToLogin={() => navigate('/login')}
+                  />
+                </AuthLayout>
+              )
+            }
+          />
+          <Route
+            path="/reset"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/app" replace />
+              ) : (
+                <AuthLayout>
+                  <ResetPasswordForm
+                    email={pendingEmail}
+                    onSuccess={() => navigate('/login')}
+                    onBackToLogin={() => navigate('/login')}
+                  />
+                </AuthLayout>
+              )
+            }
+          />
+          <Route
+            path="/app"
+            element={
+              isAuthenticated ? (
+                <Dashboard user={user} onLogout={handleLogout} api={api} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/admin/login"
+            element={
+              <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+                <AdminLogin />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin/register"
+            element={
+              <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+                <AdminRegister />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
+                <AdminLayout />
+              </Suspense>
+            }
+          >
+            <Route index element={<AdminOverview />} />
+            <Route path="orgs" element={<AdminOrganizations />} />
+            <Route path="orgs/:id" element={<AdminOrganizationDetail />} />
+            <Route path="staff" element={<AdminStaff />} />
+            <Route path="people" element={<AdminPeople />} />
+            <Route path="templates" element={<AdminTemplates />} />
+            <Route path="delivery-logs" element={<AdminDeliveryLogs />} />
+            <Route path="audit-logs" element={<AdminAuditLogs />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+      <Analytics />
+    </>
   );
 }

@@ -15,6 +15,19 @@ type OverviewStats = {
     successful: number;
     failed: number;
   };
+  deliveryFailures: {
+    last24h: number;
+    last7d: number;
+    byChannel24h: {
+      email: number;
+      sms: number;
+      whatsapp: number;
+    };
+  };
+  observability: {
+    recentErrorCount: number;
+    lastErrorAt: string | null;
+  };
 };
 
 type AdminDashboardProps = {
@@ -32,6 +45,7 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [recentErrors, setRecentErrors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +76,7 @@ export default function AdminDashboard({
       const data = await api.call('/admin/overview');
       setStats(data.stats);
       setRecentActivity(data.recentActivity || []);
+      setRecentErrors(data.recentErrors || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -159,6 +174,7 @@ export default function AdminDashboard({
       { label: 'Templates', value: stats.totalTemplates },
       { label: 'Active Templates', value: stats.activeTemplates },
       { label: 'Upcoming Birthdays', value: stats.upcomingBirthdays },
+      { label: 'Failed (24h)', value: stats.deliveryFailures?.last24h ?? 0 },
     ];
   }, [stats]);
 
@@ -351,7 +367,7 @@ export default function AdminDashboard({
       )}
 
       {hasFirstSend && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {summaryCards.map((card) => (
             <div key={card.label} className="bg-white p-4 rounded-lg shadow">
               <p className="text-xs uppercase text-gray-500">{card.label}</p>
@@ -377,6 +393,66 @@ export default function AdminDashboard({
               </div>
             </div>
           )}
+          {stats && (
+            <div className="bg-white p-4 rounded-lg shadow md:col-span-2">
+              <p className="text-xs uppercase text-gray-500 mb-2">Delivery Failures</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-500">Last 24h</p>
+                  <p className="text-lg font-semibold">{stats.deliveryFailures?.last24h ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Last 7d</p>
+                  <p className="text-lg font-semibold">{stats.deliveryFailures?.last7d ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Email (24h)</p>
+                  <p className="font-medium">{stats.deliveryFailures?.byChannel24h?.email ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">SMS (24h)</p>
+                  <p className="font-medium">{stats.deliveryFailures?.byChannel24h?.sms ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">WhatsApp (24h)</p>
+                  <p className="font-medium">{stats.deliveryFailures?.byChannel24h?.whatsapp ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Recent Errors</p>
+                  <p className="font-medium">{stats.observability?.recentErrorCount ?? 0}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasFirstSend && recentErrors.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-lg font-bold">Recent System Errors</h2>
+          </div>
+          <div className="divide-y">
+            {recentErrors.map((item) => (
+              <div key={item.id} className="px-6 py-4 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium">
+                      {item.category}
+                      {item.channel ? ` (${item.channel})` : ''}
+                    </p>
+                    <p className="text-gray-600">{item.message}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase text-gray-500">{item.severity}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

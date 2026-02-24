@@ -228,6 +228,9 @@ const landingMarkup = `
         <a href="#pricing" class="hover:text-slate-900 transition-colors">Pricing</a>
       </div>
       <div class="flex items-center gap-4">
+        <a href="https://calendar.app.google/jJpD732TzNt74Axd9" target="_blank" rel="noopener noreferrer" class="hidden sm:inline-flex items-center justify-center border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2 rounded-full transition-all">
+          Book a demo
+        </a>
         <a href="#" data-action="open-waitlist" class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-full transition-all shadow-lg shadow-slate-900/20">
           Join waitlist
         </a>
@@ -245,17 +248,17 @@ const landingMarkup = `
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
               <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
             </span>
-            Beta is now live
+            New: SMS + WhatsApp support
           </div>
           <h1 class="text-5xl sm:text-7xl font-semibold text-slate-900 tracking-tight leading-[1.1] mb-8">
             Never Miss a <br>
-            <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Birthday Again</span>
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Celebration Again</span>
           </h1>
           <p class="text-xl text-slate-600 leading-relaxed mb-6 font-normal">
-            Automated birthday emails that feel personal, not robotic.
+            Make presence felt, automatically.
           </p>
           <p class="text-lg text-slate-500 mb-10 leading-relaxed max-w-lg">
-            MomentOS helps teams, churches, startups, and organizations send thoughtful birthday messages automatically — without chasing designers, spreadsheets, or reminders.
+            MomentOS sends thoughtful celebration messages across Email, SMS, and WhatsApp so no one in your circle ever feels forgotten.
           </p>
           <div class="flex flex-col sm:flex-row gap-4">
             <a href="#" data-action="open-waitlist" class="inline-flex justify-center items-center px-8 py-3.5 text-base font-medium rounded-full text-white bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5">
@@ -266,12 +269,7 @@ const landingMarkup = `
             </a>
           </div>
           <div class="mt-8 flex items-center gap-4 text-sm text-slate-500">
-            <div class="flex -space-x-2">
-              <div class="w-8 h-8 rounded-full bg-slate-200 border-2 border-white"></div>
-              <div class="w-8 h-8 rounded-full bg-slate-300 border-2 border-white"></div>
-              <div class="w-8 h-8 rounded-full bg-slate-400 border-2 border-white"></div>
-            </div>
-            <p>Set it once. We handle the moments.</p>
+            <p>Upload once. Celebrate forever.</p>
           </div>
         </div>
 
@@ -318,7 +316,7 @@ const landingMarkup = `
                     <path d="M3 10h18"></path>
                   </svg>
                 </div>
-                <div class="text-sm font-medium text-slate-900">Upcoming Birthdays</div>
+                <div class="text-sm font-medium text-slate-900">Upcoming Celebrations</div>
               </div>
               <div class="space-y-2">
                 <div class="flex items-center justify-between text-xs p-2 rounded bg-slate-50">
@@ -390,8 +388,8 @@ const landingMarkup = `
   <section id="problem" class="py-24 bg-slate-50">
     <div class="max-w-7xl mx-auto px-6">
       <div class="max-w-3xl mx-auto text-center mb-16">
-        <h2 class="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight mb-4">Managing birthdays shouldn’t feel like work</h2>
-        <p class="text-lg text-slate-600">Right now, birthday management is a broken process of manual reminders and last-minute scrambles.</p>
+        <h2 class="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight mb-4">Managing celebrations shouldn’t feel like work</h2>
+        <p class="text-lg text-slate-600">Right now, celebration workflows are a broken process of manual reminders and last-minute scrambles.</p>
       </div>
 
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -441,7 +439,7 @@ const landingMarkup = `
             </svg>
           </div>
           <h3 class="text-lg font-semibold text-slate-900 mb-2">Generic Messages</h3>
-          <p class="text-base text-slate-500">The \"happy birthday\" feels forced, late, or completely robotic.</p>
+          <p class="text-base text-slate-500">The \"congratulations\" message feels forced, late, or completely robotic.</p>
         </div>
       </div>
     </div>
@@ -452,32 +450,32 @@ const landingMarkup = `
       <div class="grid lg:grid-cols-2 gap-16 items-center">
         <div>
           <span class="text-indigo-600 font-semibold tracking-wide uppercase text-sm">The Solution</span>
-          <h2 class="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight mt-3 mb-6">MomentOS turns birthdays into a system</h2>
+          <h2 class="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight mt-3 mb-6">MomentOS turns celebrations into a system</h2>
           <p class="text-xl text-slate-600 mb-8">MomentOS is a lightweight platform that automates the care without losing the human touch.</p>
           <ul class="space-y-4">
             <li class="flex items-start gap-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span class="text-lg text-slate-700">Store people’s birthdays in one secure place.</span>
+              <span class="text-lg text-slate-700">Store celebration dates, emails, and phone numbers in one secure place.</span>
             </li>
             <li class="flex items-start gap-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span class="text-lg text-slate-700">Automatically send beautifully written emails on the right day.</span>
+              <span class="text-lg text-slate-700">Automatically send personalized messages by Email, SMS, and WhatsApp.</span>
             </li>
             <li class="flex items-start gap-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span class="text-lg text-slate-700">Notify admins ahead of time so you're prepared.</span>
+              <span class="text-lg text-slate-700">Use channel-aware templates with per-organization delivery toggles.</span>
             </li>
             <li class="flex items-start gap-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span class="text-lg text-slate-700">Stay consistent without extra effort. No chasing, no stress.</span>
+              <span class="text-lg text-slate-700">Run timezone-aware schedules with dedupe guards and clear delivery logs.</span>
             </li>
           </ul>
         </div>
@@ -505,9 +503,9 @@ const landingMarkup = `
                   <div class="text-slate-200 font-medium">Auto-Send Log</div>
                 </div>
                 <div class="space-y-2 font-mono text-xs text-slate-400">
-                  <div class="flex justify-between"><span>&gt; Sending to alex@company.com...</span><span class="text-green-400">Sent</span></div>
-                  <div class="flex justify-between"><span>&gt; Sending to jamie@company.com...</span><span class="text-green-400">Sent</span></div>
-                  <div class="flex justify-between"><span>&gt; Next scheduled: 24h</span><span class="text-blue-400">Queued</span></div>
+                  <div class="flex justify-between"><span>&gt; Sending email to alex@company.com...</span><span class="text-green-400">Sent</span></div>
+                  <div class="flex justify-between"><span>&gt; Sending WhatsApp to +1 202 555 0194...</span><span class="text-green-400">Sent</span></div>
+                  <div class="flex justify-between"><span>&gt; SMS fallback for 3 contacts</span><span class="text-blue-400">Queued</span></div>
                 </div>
               </div>
             </div>
@@ -521,7 +519,7 @@ const landingMarkup = `
     <div class="max-w-7xl mx-auto px-6">
       <div class="text-center mb-16">
         <span class="text-indigo-600 font-semibold uppercase text-xs tracking-wider">Platform</span>
-        <h2 class="sm:text-4xl text-3xl font-semibold text-slate-900 tracking-tight mt-2">Everything you need to automate joy</h2>
+        <h2 class="sm:text-4xl text-3xl font-semibold text-slate-900 tracking-tight mt-2">Everything you need to automate celebration outreach</h2>
       </div>
 
       <div class="grid md:grid-cols-2 gap-6">
@@ -562,7 +560,7 @@ const landingMarkup = `
           </div>
           <div class="p-8">
             <h3 class="text-xl font-semibold text-slate-900 mb-2">Centralized People Data</h3>
-            <p class="text-slate-500 leading-relaxed">Import from CSV, connect your HRIS, or add manually. We keep everything organized and validate dates automatically.</p>
+            <p class="text-slate-500 leading-relaxed">Import from CSV with AI suggestions, add manually, and normalize international phone numbers automatically.</p>
           </div>
         </div>
 
@@ -579,7 +577,7 @@ const landingMarkup = `
                   <div class="space-y-2">
                     <div class="h-2 w-10 bg-slate-200 rounded-full"></div>
                     <div class="h-9 w-full bg-slate-50 rounded-lg border border-slate-100 flex items-center px-3 text-xs text-slate-400 shadow-sm">
-                      Happy Birthday,
+                      Happy Celebration,
                       <span class="text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded mx-1.5 font-medium">{name}</span>!
                     </div>
                   </div>
@@ -596,8 +594,8 @@ const landingMarkup = `
             </div>
           </div>
           <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Smart Templates</h3>
-            <p class="text-slate-500 leading-relaxed">Create dynamic templates with variables. Our editor makes sure every message feels personal and on-brand.</p>
+            <h3 class="text-xl font-semibold text-slate-900 mb-2">Channel-Aware Templates</h3>
+            <p class="text-slate-500 leading-relaxed">Build once and deliver across Email, SMS, and WhatsApp with template-level channel controls.</p>
           </div>
         </div>
 
@@ -639,7 +637,7 @@ const landingMarkup = `
           </div>
           <div class="p-8">
             <h3 class="text-xl font-semibold text-slate-900 mb-2">Precision Scheduling</h3>
-            <p class="text-slate-500 leading-relaxed">We automatically calculate the perfect send time based on your organization's timezone settings.</p>
+            <p class="text-slate-500 leading-relaxed">Timezone-aware scheduling plus dedupe protection keeps deliveries on time without duplicates.</p>
           </div>
         </div>
 
@@ -673,8 +671,8 @@ const landingMarkup = `
             </div>
           </div>
           <div class="p-8">
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Team Management</h3>
-            <p class="text-slate-500 leading-relaxed">Manage admins, view permissions, and organize people into groups for department-specific messaging.</p>
+            <h3 class="text-xl font-semibold text-slate-900 mb-2">Channel Controls</h3>
+            <p class="text-slate-500 leading-relaxed">Turn SMS and WhatsApp on or off per organization and keep delivery behavior predictable.</p>
           </div>
         </div>
 
@@ -685,10 +683,10 @@ const landingMarkup = `
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
-              99.9% Deliverability
+              Delivery Visibility
             </div>
-            <h3 class="text-2xl font-semibold text-slate-900 mb-3">Enterprise Reliability</h3>
-            <p class="text-slate-500 leading-relaxed text-lg mb-8 max-w-lg">Our infrastructure is built to ensure your emails land in the inbox, not the spam folder. We monitor reputation constantly so you don't have to.</p>
+            <h3 class="text-2xl font-semibold text-slate-900 mb-3">Cross-Channel Reliability</h3>
+            <p class="text-slate-500 leading-relaxed text-lg mb-8 max-w-lg">Track outcomes across Email, SMS, and WhatsApp with persistent logs for audits, retries, and follow-up.</p>
             <div class="flex gap-8">
               <div class="flex flex-col">
                 <span class="text-3xl font-semibold text-slate-900 tracking-tight">10k+</span>
@@ -718,7 +716,7 @@ const landingMarkup = `
                     <span class="font-semibold text-slate-900 text-sm">Delivery Confirmed</span>
                     <span class="text-[10px] text-slate-400 font-medium bg-slate-50 px-1.5 py-0.5 rounded">Now</span>
                   </div>
-                  <div class="text-sm text-slate-500 truncate">Successfully sent birthday wish to <span class="text-slate-700 font-medium">Alex Morgan</span>.</div>
+                  <div class="text-sm text-slate-500 truncate">Successfully sent celebration message to <span class="text-slate-700 font-medium">Alex Morgan</span>.</div>
                 </div>
               </div>
             </div>
@@ -732,7 +730,7 @@ const landingMarkup = `
     <div class="max-w-7xl mr-auto ml-auto pr-6 pl-6">
       <div class="mb-16 max-w-3xl">
         <h2 class="text-3xl min-[600px]:text-4xl font-semibold text-slate-900 tracking-tight mb-4">Built for operations, not aesthetics alone</h2>
-        <p class="text-xl text-slate-600">Powerful features designed to make you efficient, packaged in a beautiful interface.</p>
+        <p class="text-xl text-slate-600">Multi-channel automation, AI-assisted imports, and delivery controls built for real operations teams.</p>
       </div>
 
       <div class="grid grid-cols-1 min-[600px]:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-[280px] min-[600px]:auto-rows-[320px] gap-x-6 gap-y-6">
@@ -784,8 +782,8 @@ const landingMarkup = `
                 <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>
               </svg>
             </div>
-            <h3 class="text-xl font-semibold text-slate-900 mb-2">Automated Emails</h3>
-            <p class="text-slate-500 leading-relaxed">Set it once and let MomentOS handle daily sends automatically. We ensure timely delivery every single morning.</p>
+            <h3 class="text-xl font-semibold text-slate-900 mb-2">Multi-Channel Automation</h3>
+            <p class="text-slate-500 leading-relaxed">Set it once and let MomentOS orchestrate daily Email, SMS, and WhatsApp sends automatically.</p>
           </div>
         </div>
 
@@ -806,7 +804,7 @@ const landingMarkup = `
           </div>
           <div class="mt-auto">
             <h3 class="text-lg font-semibold text-slate-900 mb-2 mt-32 min-[600px]:mt-40">Preview &amp; Test</h3>
-            <p class="text-sm text-slate-500">See exactly what recipients get. Test without spamming anyone.</p>
+            <p class="text-sm text-slate-500">Preview templates and run safe test sends before turning them on.</p>
           </div>
         </div>
 
@@ -835,8 +833,8 @@ const landingMarkup = `
             </div>
           </div>
           <div class="mt-auto">
-            <h3 class="text-lg font-semibold text-slate-900 mb-2">Upcoming View</h3>
-            <p class="text-sm text-slate-500">Know who’s celebrating in the next 7 or 30 days instantly.</p>
+            <h3 class="text-lg font-semibold text-slate-900 mb-2">Upcoming Celebrations</h3>
+            <p class="text-sm text-slate-500">See the next 7 or 30 days at a glance, then trigger a send instantly.</p>
           </div>
         </div>
 
@@ -883,7 +881,7 @@ const landingMarkup = `
               </svg>
             </div>
             <h3 class="text-xl font-semibold text-white mb-2">Detailed Delivery Logs</h3>
-            <p class="text-slate-400 leading-relaxed max-w-sm">Full transparency on every message. Know exactly what was sent, when, and to whom, with persistent history.</p>
+            <p class="text-slate-400 leading-relaxed max-w-sm">Filter by channel, status, and date to audit every send and retry failures quickly.</p>
           </div>
         </div>
 
@@ -906,7 +904,7 @@ const landingMarkup = `
           </div>
           <div class="mt-auto">
             <h3 class="text-lg font-semibold text-slate-900 mb-2">Manual Send</h3>
-            <p class="text-sm text-slate-500">Need to send early or re-send? Do it with one click.</p>
+            <p class="text-sm text-slate-500">Send email or SMS instantly when you need an early send or quick resend.</p>
           </div>
         </div>
 
@@ -944,7 +942,7 @@ const landingMarkup = `
               </svg>
             </div>
             <h3 class="text-xl font-semibold text-slate-900 mb-2">Self-Hosted Friendly</h3>
-            <p class="text-slate-500 leading-relaxed">You own your data. Run it on your own infrastructure if you prefer total control.</p>
+            <p class="text-slate-500 leading-relaxed">You own your data, with deployment flexibility and clear operational controls.</p>
           </div>
         </div>
       </div>
@@ -1026,7 +1024,7 @@ const landingMarkup = `
             Why MomentOS
           </div>
           <h3 class="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mt-5">The calm, reliable way to celebrate.</h3>
-          <p class="text-base text-slate-600 mt-4">We focus on the essentials that make birthday outreach dependable.</p>
+          <p class="text-base text-slate-600 mt-4">We focus on the essentials that make celebration outreach dependable.</p>
 
           <div class="mt-8 space-y-5">
             <div class="flex gap-4">
@@ -1101,9 +1099,9 @@ const landingMarkup = `
           </div>
           <ul class="mt-6 space-y-3 text-slate-600 text-sm">
             <li>Up to 25 people</li>
-            <li>Automated birthday emails</li>
+            <li>Automated celebration emails</li>
             <li>Default email templates</li>
-            <li>Upcoming birthdays view</li>
+            <li>Upcoming celebrations view</li>
             <li>Manual send option</li>
             <li>Basic delivery logs</li>
           </ul>
@@ -1174,7 +1172,7 @@ const landingMarkup = `
             <li>Up to 2,500 people</li>
             <li>Unlimited templates</li>
             <li>Advanced delivery logs</li>
-            <li>Admin reminders (upcoming birthdays)</li>
+            <li>Admin reminders (upcoming celebrations)</li>
             <li>Bulk actions (delete, opt-out, export)</li>
             <li>Dedicated support</li>
             <li>Early access to new features</li>
@@ -1218,8 +1216,8 @@ const landingMarkup = `
             Automations
           </span>
           <div class="max-w-2xl">
-            <h2 class="text-3xl sm:text-5xl font-semibold text-slate-900 tracking-tight">One-click birthday automation</h2>
-            <p class="mt-4 text-lg text-slate-600">Connect your data once and let MomentOS deliver thoughtful messages automatically: on time, every time.</p>
+            <h2 class="text-3xl sm:text-5xl font-semibold text-slate-900 tracking-tight">One workflow. Three delivery channels.</h2>
+            <p class="mt-4 text-lg text-slate-600">Connect your data once and let MomentOS deliver celebration messages by Email, SMS, and WhatsApp on schedule.</p>
           </div>
           <div class="flex flex-col sm:flex-row gap-3">
             <a href="#" data-action="open-waitlist" class="inline-flex items-center justify-center rounded-full bg-slate-900 px-7 py-3 text-sm font-semibold text-white">
@@ -1242,9 +1240,9 @@ const landingMarkup = `
           </div>
 
           <div class="absolute right-8 top-12 hidden flex-col gap-6 sm:flex">
-            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Mail</div>
+            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">SMS</div>
             <div class="prefooter-float h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Log</div>
-            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">Send</div>
+            <div class="prefooter-float slow h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-semibold">WA</div>
           </div>
         </div>
       </div>
@@ -1253,28 +1251,7 @@ const landingMarkup = `
 
   <footer class="bg-slate-50 border-t border-slate-200">
     <div class="max-w-7xl mx-auto px-6 py-16">
-      <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-blue-700 to-violet-700 p-10 sm:p-12 text-white reveal" data-reveal>
-        <div class="absolute -top-16 -left-10 h-40 w-40 rounded-full bg-white/15 blur-2xl"></div>
-        <div class="absolute -bottom-20 right-10 h-48 w-48 rounded-full bg-white/15 blur-2xl"></div>
-        <div class="relative z-10 grid gap-6 lg:grid-cols-[1.4fr_auto] lg:items-center">
-          <div>
-            <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Make birthdays effortless again.</h2>
-            <p class="mt-3 text-sm sm:text-base text-white/90 max-w-2xl">
-              Automate thoughtful birthday messages without the spreadsheets, reminders, or missed moments.
-            </p>
-          </div>
-          <div class="flex flex-col sm:flex-row gap-3">
-            <a href="#" data-action="open-waitlist" class="inline-flex items-center justify-center rounded-full bg-white text-slate-900 px-6 py-3 text-sm font-semibold">
-              Join the waitlist
-            </a>
-            <a href="#features" class="inline-flex items-center justify-center rounded-full border border-white/60 px-6 py-3 text-sm font-semibold text-white">
-              Explore features
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div class="mt-14 grid gap-10 md:grid-cols-[1.2fr_0.8fr_0.8fr_1.2fr]">
+      <div class="grid gap-10 md:grid-cols-[1.2fr_0.8fr_0.8fr_1.2fr]">
         <div class="space-y-4 reveal" data-reveal data-reveal-delay="120ms">
           <div class="flex items-center gap-2">
             <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold">M</div>
@@ -1310,6 +1287,7 @@ const landingMarkup = `
           <ul class="space-y-2 text-sm text-slate-600">
             <li><a href="#features" class="hover:text-slate-900 transition-colors">Features</a></li>
             <li><a href="#how-it-works" class="hover:text-slate-900 transition-colors">How it works</a></li>
+            <li><a href="/changelog" class="hover:text-slate-900 transition-colors">Changelog</a></li>
             <li><a href="#" data-action="open-waitlist" class="hover:text-slate-900 transition-colors">Join waitlist</a></li>
           </ul>
         </div>
