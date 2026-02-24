@@ -14,6 +14,10 @@ type RateLimitBucket = {
 };
 
 const LOCALHOST_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const DEFAULT_PRODUCTION_ORIGINS = [
+  "https://usemomentos.xyz",
+  "https://www.usemomentos.xyz",
+];
 
 const normalizeOrigin = (value: string) => {
   try {

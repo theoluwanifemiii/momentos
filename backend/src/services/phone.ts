@@ -5,15 +5,24 @@ export function normalizePhone(raw: string): string {
   }
 
   let cleaned = trimmed.replace(/[^\d+]/g, '');
+  const rawDefaultCountryCode = process.env.DEFAULT_PHONE_COUNTRY_CODE || '';
+  const defaultCountryCode = rawDefaultCountryCode.replace(/\D/g, '');
+  if (rawDefaultCountryCode && !defaultCountryCode) {
+    throw new Error('DEFAULT_PHONE_COUNTRY_CODE is invalid');
+  }
 
   if (cleaned.startsWith('00')) {
     cleaned = `+${cleaned.slice(2)}`;
   }
 
   if (cleaned.startsWith('+')) {
-    const digits = cleaned.slice(1).replace(/\D/g, '');
+    let digits = cleaned.slice(1).replace(/\D/g, '');
     if (!digits) {
       throw new Error('Invalid phone number');
+    }
+    // Normalize trunk prefix like +2340903... -> +234903...
+    if (defaultCountryCode && digits.startsWith(`${defaultCountryCode}0`)) {
+      digits = `${defaultCountryCode}${digits.slice(defaultCountryCode.length + 1)}`;
     }
     return `+${digits}`;
   }
@@ -23,13 +32,17 @@ export function normalizePhone(raw: string): string {
     throw new Error('Invalid phone number');
   }
 
-  const defaultCountryCode = process.env.DEFAULT_PHONE_COUNTRY_CODE;
   if (defaultCountryCode) {
-    const countryCode = defaultCountryCode.replace(/\D/g, '');
-    if (!countryCode) {
-      throw new Error('DEFAULT_PHONE_COUNTRY_CODE is invalid');
+    if (digits.startsWith(`${defaultCountryCode}0`)) {
+      return `+${defaultCountryCode}${digits.slice(defaultCountryCode.length + 1)}`;
     }
-    return `+${countryCode}${digits}`;
+    if (digits.startsWith(defaultCountryCode)) {
+      return `+${digits}`;
+    }
+    if (digits.startsWith('0')) {
+      return `+${defaultCountryCode}${digits.slice(1)}`;
+    }
+    return `+${defaultCountryCode}${digits}`;
   }
 
   if (digits.length >= 10 && digits.length <= 15) {

@@ -103,6 +103,8 @@ export class SMSService {
     if (!trimmed) {
       throw new Error('Phone number is required');
     }
+    const defaultCountryCode = (process.env.DEFAULT_PHONE_COUNTRY_CODE || '')
+      .replace(/\D/g, '');
 
     let cleaned = trimmed.replace(/[^\d+]/g, '');
     if (cleaned.startsWith('00')) {
@@ -110,9 +112,12 @@ export class SMSService {
     }
 
     if (cleaned.startsWith('+')) {
-      const digits = cleaned.slice(1).replace(/\D/g, '');
+      let digits = cleaned.slice(1).replace(/\D/g, '');
       if (!digits) {
         throw new Error('Invalid phone number');
+      }
+      if (defaultCountryCode && digits.startsWith(`${defaultCountryCode}0`)) {
+        digits = `${defaultCountryCode}${digits.slice(defaultCountryCode.length + 1)}`;
       }
       return digits;
     }
@@ -121,9 +126,6 @@ export class SMSService {
     if (!digits) {
       throw new Error('Invalid phone number');
     }
-
-    const defaultCountryCode = (process.env.DEFAULT_PHONE_COUNTRY_CODE || '')
-      .replace(/\D/g, '');
 
     if (digits.startsWith('0')) {
       if (defaultCountryCode) {
@@ -136,6 +138,10 @@ export class SMSService {
 
     if (digits.length === 10) {
       return `${defaultCountryCode || '234'}${digits}`;
+    }
+
+    if (defaultCountryCode && digits.startsWith(`${defaultCountryCode}0`)) {
+      return `${defaultCountryCode}${digits.slice(defaultCountryCode.length + 1)}`;
     }
 
     if (digits.length >= 10 && digits.length <= 15) {
