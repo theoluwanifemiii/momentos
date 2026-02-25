@@ -46,7 +46,7 @@ export function registerWebhookRoutes(app: Express) {
   // ============================================================================
   // WEBHOOK ROUTES (provider callbacks)
   // ============================================================================
-  app.post("/api/webhooks/termii/sms", async (req: Request, res: Response) => {
+  const handleTermiiSmsWebhook = async (req: Request, res: Response) => {
     try {
       const expectedToken = (process.env.TERMII_WEBHOOK_TOKEN || "").trim();
       if (expectedToken) {
@@ -135,6 +135,11 @@ export function registerWebhookRoutes(app: Express) {
       console.error("Termii SMS webhook error:", error);
       return res.status(500).json({ error: "Webhook processing failed" });
     }
-  });
+  };
+
+  // Primary endpoint.
+  app.post("/api/webhooks/termii/sms", handleTermiiSmsWebhook);
+  // Compatibility alias for deployments/proxies configured without /api prefix.
+  app.post("/webhooks/termii/sms", handleTermiiSmsWebhook);
   // ============================================================================
 }
