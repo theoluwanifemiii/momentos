@@ -32,6 +32,7 @@ model Organization {
   schedulerRuns       SchedulerRun[]
   users               User[]
   Moment              Moment[]
+  systemErrorLogs     SystemErrorLog[]
 
   @@map("organizations")
 }
@@ -308,6 +309,31 @@ model MomentRecipient {
   @@unique([momentId, personId])
   @@index([personId])
   @@map("moment_recipients")
+}
+
+enum ErrorSeverity {
+  INFO
+  WARN
+  ERROR
+  CRITICAL
+}
+
+model SystemErrorLog {
+  id             String           @id @default(cuid())
+  source         String
+  category       String
+  severity       ErrorSeverity    @default(ERROR)
+  message        String
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  channel        DeliveryChannel?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([source, createdAt])
+  @@index([category, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("system_error_logs")
 }
 
 enum OrgPlan {
