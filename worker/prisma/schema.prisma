@@ -234,7 +234,7 @@ model Moment {
   category            MomentCategory
   eventDate           DateTime
   recurrenceRule      MomentRecurrence  @default(ANNUAL)
-  deliveryChannels    DeliveryChannel[] @default([email])
+  deliveryChannels    DeliveryChannel[] @default([email]) @db.Object
   templateId          String?
   template            Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
   ownerType           MomentOwnerType   @default(ORGANIZATION)

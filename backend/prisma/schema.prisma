@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Organization {
@@ -31,6 +30,7 @@ model Organization {
   people              Person[]
   schedulerRuns       SchedulerRun[]
   users               User[]
+  Moment              Moment[]
 
   @@map("organizations")
 }
@@ -48,6 +48,7 @@ model User {
   lastLoginAt     DateTime?
   otps            Otp[]
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  Moment          Moment[]
 
   @@map("users")
 }
@@ -83,20 +84,21 @@ model OnboardingProgress {
 }
 
 model Person {
-  id             String        @id @default(cuid())
-  fullName       String
-  firstName      String?
-  email          String
-  birthday       DateTime
-  department     String?
-  role           String?
-  optedOut       Boolean       @default(false)
-  organizationId String
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  phone          String?
-  deliveryLogs   DeliveryLog[]
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id              String            @id @default(cuid())
+  fullName        String
+  firstName       String?
+  email           String
+  birthday        DateTime
+  department      String?
+  role            String?
+  optedOut        Boolean           @default(false)
+  organizationId  String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  phone           String?
+  deliveryLogs    DeliveryLog[]
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  MomentRecipient MomentRecipient[]
 
   @@unique([organizationId, email])
   @@map("people")
@@ -116,6 +118,7 @@ model Template {
   channels      DeliveryChannel[]      @default([email])
   deliveryLogs  DeliveryLog[]
   organizations OrganizationTemplate[]
+  Moment        Moment[]
 
   @@map("templates")
 }
@@ -139,6 +142,8 @@ model DeliveryLog {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   person         Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
   template       Template        @relation(fields: [templateId], references: [id])
+  Moment         Moment?         @relation(fields: [momentId], references: [id])
+  momentId       String?
 
   @@map("delivery_logs")
 }
@@ -237,6 +242,71 @@ model AdminInvite {
   creator   AdminUser @relation("AdminInviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@map("admin_invites")
+}
+
+enum MomentCategory {
+  BIRTHDAY
+  ANNIVERSARY
+  GRADUATION
+  PROMOTION_CAREER_MILESTONE
+  SPIRITUAL_MILESTONE
+  REMEMBRANCE_DAY
+  CUSTOM
+}
+
+enum MomentRecurrence {
+  ONE_TIME
+  ANNUAL
+  CUSTOM
+}
+
+enum MomentOwnerType {
+  ORGANIZATION
+  USER
+}
+
+enum MomentStatus {
+  ACTIVE
+  PAUSED
+}
+
+model Moment {
+  id                  String            @id @default(cuid())
+  title               String
+  category            MomentCategory
+  eventDate           DateTime
+  recurrenceRule      MomentRecurrence  @default(ANNUAL)
+  deliveryChannels    DeliveryChannel[] @default([email])
+  templateId          String?
+  template            Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  ownerType           MomentOwnerType   @default(ORGANIZATION)
+  ownerOrganizationId String?
+  ownerOrganization   Organization?     @relation(fields: [ownerOrganizationId], references: [id], onDelete: Cascade)
+  ownerUserId         String?
+  ownerUser           User?             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  status              MomentStatus      @default(ACTIVE)
+  recipients          MomentRecipient[]
+  deliveryLogs        DeliveryLog[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([ownerOrganizationId, status])
+  @@index([ownerUserId, status])
+  @@index([eventDate, recurrenceRule, status])
+  @@map("moments")
+}
+
+model MomentRecipient {
+  id        String   @id @default(cuid())
+  momentId  String
+  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
+  personId  String
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([momentId, personId])
+  @@index([personId])
+  @@map("moment_recipients")
 }
 
 enum OrgPlan {
