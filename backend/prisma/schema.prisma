@@ -1,8 +1,5 @@
-// Database Schema for MomentOS
-// File: backend/prisma/schema.prisma
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-1.1.x"]
 }
 
@@ -11,39 +8,235 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Organization - the top-level tenant
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  timezone  String   @default("UTC") // e.g. "Africa/Lagos", "America/Los_Angeles"
-  birthdaySendHour   Int      @default(9)
-  birthdaySendMinute Int      @default(0)
-  birthdayLastRunAt  DateTime?
-  plan      OrgPlan  @default(FREE)
-  isSuspended Boolean @default(false)
-  suspendedAt DateTime?
-  
-  // Email configuration
-  emailFromName    String?
-  emailFromAddress String?
-  smsEnabled       Boolean   @default(false)
-  whatsappEnabled  Boolean   @default(false)
-  senderId         String?   @default("MomentOS")
-  
-  // Relationships
-  users         User[]
-  people        Person[]
+  id                  String                 @id @default(cuid())
+  name                String
+  timezone            String                 @default("UTC")
+  emailFromName       String?
+  emailFromAddress    String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  birthdayLastRunAt   DateTime?
+  birthdaySendHour    Int                    @default(9)
+  birthdaySendMinute  Int                    @default(0)
+  isSuspended         Boolean                @default(false)
+  plan                OrgPlan                @default(FREE)
+  suspendedAt         DateTime?
+  smsEnabled          Boolean                @default(false)
+  senderId            String?                @default("MomentOS")
+  whatsappEnabled     Boolean                @default(false)
+  deliveryLogs        DeliveryLog[]
+  onboarding          OnboardingProgress?
   templateAssignments OrganizationTemplate[]
-  deliveryLogs  DeliveryLog[]
-  systemErrorLogs SystemErrorLog[]
-  moments       Moment[]
-  onboarding    OnboardingProgress?
-  schedulerRuns SchedulerRun[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  people              Person[]
+  schedulerRuns       SchedulerRun[]
+  users               User[]
+
   @@map("organizations")
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  role            UserRole     @default(ADMIN)
+  organizationId  String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  emailVerifiedAt DateTime?
+  isDisabled      Boolean      @default(false)
+  lastLoginAt     DateTime?
+  otps            Otp[]
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+model Otp {
+  id          String     @id @default(cuid())
+  email       String
+  userId      String?
+  purpose     OtpPurpose
+  codeHash    String
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose])
+  @@map("otps")
+}
+
+model OnboardingProgress {
+  id                    String       @id @default(cuid())
+  organizationId        String       @unique
+  completedSteps        String[]
+  testEmailSentAt       DateTime?
+  automationActivatedAt DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_progress")
+}
+
+model Person {
+  id             String        @id @default(cuid())
+  fullName       String
+  firstName      String?
+  email          String
+  birthday       DateTime
+  department     String?
+  role           String?
+  optedOut       Boolean       @default(false)
+  organizationId String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  phone          String?
+  deliveryLogs   DeliveryLog[]
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@map("people")
+}
+
+model Template {
+  id            String                 @id @default(cuid())
+  name          String
+  type          TemplateType
+  subject       String
+  content       String
+  imageUrl      String?
+  isActive      Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  isSystem      Boolean                @default(false)
+  channels      DeliveryChannel[]      @default([email])
+  deliveryLogs  DeliveryLog[]
+  organizations OrganizationTemplate[]
+
+  @@map("templates")
+}
+
+model DeliveryLog {
+  id             String          @id @default(cuid())
+  personId       String
+  templateId     String
+  organizationId String
+  status         DeliveryStatus  @default(QUEUED)
+  scheduledFor   DateTime
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  errorMessage   String?
+  retryCount     Int             @default(0)
+  externalId     String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  channel        DeliveryChannel @default(email)
+  momentid       String?
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  person         Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
+  template       Template        @relation(fields: [templateId], references: [id])
+
+  @@map("delivery_logs")
+}
+
+model OrganizationTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  templateId     String
+  isDefault      Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  assignedAt     DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template       Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, templateId])
+  @@map("organization_templates")
+}
+
+model SchedulerRun {
+  id             String       @id @default(cuid())
+  organizationId String
+  runDate        String
+  runTime        DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, runDate])
+  @@map("scheduler_runs")
+}
+
+model WaitlistEntry {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  organization String
+  role         String?
+  teamSize     String?
+  country      String?
+  createdAt    DateTime @default(now())
+  firstName    String
+  lastName     String
+
+  @@map("waitlist_entries")
+}
+
+model AdminUser {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  role         AdminRole       @default(SUPER_ADMIN)
+  isActive     Boolean         @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  auditLogs    AdminAuditLog[]
+  invitesSent  AdminInvite[]   @relation("AdminInviteCreator")
+  sessions     AdminSession[]
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  adminId   String
+  tokenHash String    @unique
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_sessions")
+}
+
+model AdminAuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_audit_logs")
+}
+
+model AdminInvite {
+  id        String    @id @default(cuid())
+  email     String
+  role      AdminRole @default(SUPPORT)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String
+  createdAt DateTime  @default(now())
+  creator   AdminUser @relation("AdminInviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("admin_invites")
 }
 
 enum OrgPlan {
@@ -52,129 +245,14 @@ enum OrgPlan {
   PAID
 }
 
-// Admin users who manage the system
-model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
-  passwordHash   String
-  role           UserRole     @default(ADMIN)
-  emailVerifiedAt DateTime?
-  lastLoginAt    DateTime?
-  isDisabled     Boolean      @default(false)
-  
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  otps           Otp[]
-  ownedMoments   Moment[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  @@map("users")
-}
-
 enum UserRole {
   ADMIN
   VIEWER
 }
 
-// One-time passcodes for verification and reset flows
-model Otp {
-  id        String   @id @default(cuid())
-  email     String
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  purpose   OtpPurpose
-  codeHash  String
-  attempts  Int      @default(0)
-  maxAttempts Int    @default(5)
-  expiresAt DateTime
-  consumedAt DateTime?
-  createdAt DateTime @default(now())
-
-  @@index([email, purpose])
-  @@map("otps")
-}
-
 enum OtpPurpose {
   REGISTER_VERIFY
   PASSWORD_RESET
-}
-
-// Per-organization onboarding progress
-model OnboardingProgress {
-  id        String   @id @default(cuid())
-  organizationId String @unique
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  completedSteps String[]
-  testEmailSentAt DateTime?
-  automationActivatedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("onboarding_progress")
-}
-
-// People whose birthdays we're tracking
-model Person {
-  id        String   @id @default(cuid())
-  
-  // Core fields
-  fullName   String
-  firstName  String? // Optional - extracted or provided
-  email      String
-  phone      String?
-  birthday   DateTime // Stored as date only, time ignored
-  
-  // Optional fields
-  department String?
-  role       String?
-  
-  // System fields
-  optedOut   Boolean  @default(false)
-  
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  deliveryLogs DeliveryLog[]
-  momentRecipients MomentRecipient[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Email must be unique per organization
-  @@unique([organizationId, email])
-  @@map("people")
-}
-
-// Email templates
-model Template {
-  id      String       @id @default(cuid())
-  name    String
-  type    TemplateType
-  
-  // Template content
-  subject    String
-  content    String      @db.Text
-  imageUrl   String?     // For custom_image type
-  
-  // Flags
-  isActive   Boolean     @default(true)
-  isSystem   Boolean     @default(false)
-  channels   DeliveryChannel[] @default([email])
-
-  organizations OrganizationTemplate[]
-  
-  deliveryLogs DeliveryLog[]
-  moments      Moment[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  @@map("templates")
 }
 
 enum TemplateType {
@@ -189,244 +267,16 @@ enum DeliveryChannel {
   whatsapp
 }
 
-// Delivery tracking
-model DeliveryLog {
-  id        String        @id @default(cuid())
-  
-  // What was sent
-  personId    String
-  person      Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
-  
-  templateId  String
-  template    Template    @relation(fields: [templateId], references: [id])
-
-  momentId    String?
-  moment      Moment?     @relation(fields: [momentId], references: [id], onDelete: SetNull)
-  
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
-  // Delivery details
-  status        DeliveryStatus @default(QUEUED)
-  channel       DeliveryChannel @default(email)
-  scheduledFor  DateTime       // When it should be sent
-  sentAt        DateTime?      // When it was actually sent
-  deliveredAt   DateTime?      // When email was delivered
-  
-  // Error handling
-  errorMessage  String?        @db.Text
-  retryCount    Int            @default(0)
-  
-  // Tracking
-  externalId    String?        // Email provider's tracking ID
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([momentId])
-  
-  @@map("delivery_logs")
-}
-
-model Moment {
-  id                  String            @id @default(cuid())
-  title               String
-  category            MomentCategory
-  eventDate           DateTime
-  recurrenceRule      MomentRecurrence  @default(ANNUAL)
-  deliveryChannels    DeliveryChannel[] @default([email])
-  templateId          String?
-  template            Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  ownerType           MomentOwnerType   @default(ORGANIZATION)
-  ownerOrganizationId String?
-  ownerOrganization   Organization?     @relation(fields: [ownerOrganizationId], references: [id], onDelete: Cascade)
-  ownerUserId         String?
-  ownerUser           User?             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  status              MomentStatus      @default(ACTIVE)
-  recipients          MomentRecipient[]
-  deliveryLogs        DeliveryLog[]
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-
-  @@index([ownerOrganizationId, status])
-  @@index([ownerUserId, status])
-  @@index([eventDate, recurrenceRule, status])
-  @@map("moments")
-}
-
-model MomentRecipient {
-  id        String   @id @default(cuid())
-  momentId  String
-  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
-  personId  String
-  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([momentId, personId])
-  @@index([personId])
-  @@map("moment_recipients")
-}
-
-model OrganizationTemplate {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  templateId     String
-  template       Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  isDefault      Boolean      @default(false)
-  isActive       Boolean      @default(true)
-  assignedAt     DateTime     @default(now())
-
-  @@unique([organizationId, templateId])
-  @@map("organization_templates")
-}
-
-model SchedulerRun {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  runDate        String
-  runTime        DateTime     @default(now())
-
-  @@unique([organizationId, runDate])
-  @@map("scheduler_runs")
-}
-
-enum MomentCategory {
-  BIRTHDAY
-  ANNIVERSARY
-  GRADUATION
-  PROMOTION_CAREER_MILESTONE
-  SPIRITUAL_MILESTONE
-  REMEMBRANCE_DAY
-  CUSTOM
-}
-
-enum MomentRecurrence {
-  ONE_TIME
-  ANNUAL
-  CUSTOM
-}
-
-enum MomentOwnerType {
-  ORGANIZATION
-  USER
-}
-
-enum MomentStatus {
-  ACTIVE
-  PAUSED
-}
-
-model WaitlistEntry {
-  id           String   @id @default(cuid())
-  firstName    String
-  lastName     String
-  email        String   @unique
-  organization String
-  role         String?
-  teamSize     String?
-  country      String?
-  createdAt    DateTime @default(now())
-
-  @@map("waitlist_entries")
-}
-
-model SystemErrorLog {
-  id             String          @id @default(cuid())
-  source         String
-  category       String
-  severity       ErrorSeverity   @default(ERROR)
-  message        String          @db.Text
-  organizationId String?
-  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  channel        DeliveryChannel?
-  metadata       Json?
-  createdAt      DateTime        @default(now())
-
-  @@index([source, createdAt])
-  @@index([category, createdAt])
-  @@index([organizationId, createdAt])
-  @@map("system_error_logs")
-}
-
 enum DeliveryStatus {
-  QUEUED          // Ready to send
-  SENDING         // Currently being sent
-  SENT            // Successfully sent to provider
-  DELIVERED       // Confirmed delivered by provider
-  FAILED          // Failed after retries
-  OPTED_OUT       // Person opted out
-}
-
-enum ErrorSeverity {
-  INFO
-  WARN
-  ERROR
-  CRITICAL
-}
-
-// Internal admin users (MomentOS staff)
-model AdminUser {
-  id           String       @id @default(cuid())
-  email        String       @unique
-  passwordHash String
-  role         AdminRole    @default(SUPER_ADMIN)
-  isActive     Boolean      @default(true)
-  lastLoginAt  DateTime?
-
-  sessions     AdminSession[]
-  auditLogs    AdminAuditLog[]
-  invitesSent  AdminInvite[] @relation("AdminInviteCreator")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("admin_users")
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  OPTED_OUT
 }
 
 enum AdminRole {
   SUPER_ADMIN
   SUPPORT
-}
-
-model AdminSession {
-  id         String   @id @default(cuid())
-  adminId    String
-  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  tokenHash  String   @unique
-  ip         String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime
-  revokedAt  DateTime?
-
-  @@map("admin_sessions")
-}
-
-model AdminAuditLog {
-  id         String   @id @default(cuid())
-  adminId    String
-  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  action     String
-  targetType String?
-  targetId   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
-
-  @@map("admin_audit_logs")
-}
-
-model AdminInvite {
-  id         String     @id @default(cuid())
-  email      String
-  role       AdminRole  @default(SUPPORT)
-  tokenHash  String     @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdBy  String
-  creator    AdminUser  @relation("AdminInviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt  DateTime   @default(now())
-
-  @@map("admin_invites")
 }
