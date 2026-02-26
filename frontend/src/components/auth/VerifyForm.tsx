@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
+import { Button, Input } from '../ui';
+import AuthContainer from './AuthContainer';
 
 type VerifyFormProps = {
   email: string;
@@ -74,46 +76,38 @@ export default function VerifyForm({ email, onSuccess, onBackToLogin }: VerifyFo
   };
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow">
-      <h1 className="text-2xl font-bold mb-2">Verify your account</h1>
-      <p className="text-sm text-gray-600 mb-6">
-        {token
+    <AuthContainer
+      title="Verify your account"
+      subtitle={
+        token
           ? 'We are verifying your link.'
-          : `We sent a verification link to ${emailValue || 'your email'}.`}
-      </p>
-      <div className="space-y-4">
-        {(!token || error) && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <input
-              type="email"
-              value={emailValue}
-              onChange={(e) => setEmailValue(e.target.value)}
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="you@example.com"
-            />
-          </div>
-        )}
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {message && <p className="text-green-700 text-sm">{message}</p>}
-        {(!token || error) && (
-          <button
-            onClick={handleResend}
-            disabled={resending}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {resending ? 'Sending...' : 'Resend verification link'}
-          </button>
-        )}
-        {token && verifying && (
-          <p className="text-sm text-gray-500">Verifying your account...</p>
-        )}
-      </div>
-      <p className="mt-4 text-center text-sm">
-        <button onClick={onBackToLogin} className="text-blue-600 hover:underline">
+          : `We sent a verification link to ${emailValue || 'your email'}.`
+      }
+      footer={(
+        <button type="button" onClick={onBackToLogin} className="ds-link">
           Back to login
         </button>
-      </p>
-    </div>
+      )}
+    >
+      {(!token || error) && (
+        <div>
+          <label className="ds-label">Email</label>
+          <Input
+            type="email"
+            value={emailValue}
+            onChange={(e) => setEmailValue(e.target.value)}
+            placeholder="you@example.com"
+          />
+        </div>
+      )}
+      {error && <p className="ds-alert ds-alert-error">{error}</p>}
+      {message && <p className="ds-alert ds-alert-success">{message}</p>}
+      {(!token || error) && (
+        <Button onClick={handleResend} disabled={resending} fullWidth>
+          {resending ? 'Sending...' : 'Resend verification link'}
+        </Button>
+      )}
+      {token && verifying && <p className="text-sm text-slate-500">Verifying your account...</p>}
+    </AuthContainer>
   );
 }

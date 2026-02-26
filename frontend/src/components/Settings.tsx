@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { OnboardingState } from '../types/onboarding';
 import NextStepPanel from './onboarding/NextStepPanel';
 import OnboardingBanner from './onboarding/OnboardingBanner';
+import { Button, Card, CardBody, Input, Select } from './ui';
 
 type SettingsProps = {
   api: {
@@ -126,7 +127,8 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
         />
       )}
       <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
-      <div className="bg-white p-6 rounded-lg shadow space-y-6">
+      <Card>
+        <CardBody className="space-y-6">
         <div>
           <h2 className="text-xl font-bold">Organization Settings</h2>
           <p className="text-sm text-gray-600">
@@ -134,26 +136,24 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
           </p>
         </div>
 
-        {message && <p className="text-green-700 text-sm">{message}</p>}
-        {error && <p className="text-red-600 text-sm">Settings error: {error}</p>}
+        {message && <p className="ds-alert ds-alert-success">{message}</p>}
+        {error && <p className="ds-alert ds-alert-error">Settings error: {error}</p>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">From Name</label>
-            <input
+            <label className="ds-label">From Name</label>
+            <Input
               value={form.emailFromName}
               onChange={(e) => setForm({ ...form, emailFromName: e.target.value })}
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="MomentOS"
             />
           </div>
         <div>
-          <label className="block text-sm font-medium mb-1">From Email</label>
-          <input
+          <label className="ds-label">From Email</label>
+          <Input
             type="email"
             value={form.emailFromAddress}
             onChange={(e) => setForm({ ...form, emailFromAddress: e.target.value })}
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="notifications@mail.usemomentos.xyz"
           />
           <p className="text-xs text-gray-500 mt-1">
@@ -161,7 +161,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
           </p>
         </div>
           <div className="md:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <input
                 type="checkbox"
                 checked={form.smsEnabled}
@@ -174,7 +174,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
             </p>
           </div>
           <div className="md:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <input
                 type="checkbox"
                 checked={form.whatsappEnabled}
@@ -188,14 +188,13 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
           </div>
           {form.smsEnabled && (
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-1">SMS Sender ID</label>
-              <input
+              <label className="ds-label">SMS Sender ID</label>
+              <Input
                 type="text"
                 value={form.senderId}
                 onChange={(e) =>
                   setForm({ ...form, senderId: e.target.value.substring(0, 11) })
                 }
-                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="MomentOS"
                 maxLength={11}
               />
@@ -205,45 +204,44 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium mb-1">Timezone</label>
-            <select
+            <label className="ds-label">Timezone</label>
+            <Select
               value={form.timezone}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="UTC">UTC</option>
               <option value="Africa/Lagos">Lagos (WAT)</option>
               <option value="America/New_York">New York (EST)</option>
               <option value="America/Los_Angeles">Los Angeles (PST)</option>
               <option value="Europe/London">London (GMT)</option>
-            </select>
+            </Select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Daily Send Time</label>
+            <label className="ds-label">Daily Send Time</label>
             <div className="flex items-center gap-2">
-              <select
+              <Select
                 value={form.birthdaySendHour}
                 onChange={(e) => setForm({ ...form, birthdaySendHour: Number(e.target.value) })}
-                className="w-24 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-24"
               >
                 {Array.from({ length: 24 }).map((_, i) => (
                   <option key={i} value={i}>
                     {String(i).padStart(2, '0')}
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="text-gray-500">:</span>
-              <select
+              <Select
                 value={form.birthdaySendMinute}
                 onChange={(e) => setForm({ ...form, birthdaySendMinute: Number(e.target.value) })}
-                className="w-24 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-24"
               >
                 {Array.from({ length: 60 }).map((_, i) => (
                   <option key={i} value={i}>
                     {String(i).padStart(2, '0')}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <p className="text-xs text-gray-500 mt-1">
               Uses your organization timezone.
@@ -253,22 +251,22 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
 
         <div className="flex flex-wrap justify-end gap-3">
           {isActivateStep && (
-            <button
+            <Button
               onClick={handleActivateAutomation}
-              className="bg-green-600 text-white px-5 py-2 rounded text-sm hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700"
             >
               Activate automation
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-blue-600 text-white px-5 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Settings'}
-          </button>
+          </Button>
         </div>
-      </div>
+        </CardBody>
+      </Card>
     </div>
   );
 }

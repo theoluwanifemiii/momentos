@@ -5,7 +5,52 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        brand: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+        },
+        ink: {
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          400: '#94a3b8',
+          500: '#64748b',
+          700: '#334155',
+          900: '#0f172a',
+        },
+        success: {
+          50: '#ecfdf5',
+          600: '#059669',
+          700: '#047857',
+        },
+        danger: {
+          50: '#fef2f2',
+          600: '#dc2626',
+          700: '#b91c1c',
+        },
+      },
+      borderRadius: {
+        ds: '10px',
+        'ds-lg': '14px',
+      },
+      boxShadow: {
+        ds: '0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.08)',
+        popover: '0 14px 28px rgba(15, 23, 42, 0.12)',
+      },
+      transitionTimingFunction: {
+        expressive: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      },
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+    },
   },
   plugins: [],
 }

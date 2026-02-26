@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { OnboardingState } from '../types/onboarding';
+import { Button, cn } from './ui';
 
 const CSVUpload = lazy(() => import('./people/CSVUpload.tsx'));
 const PeopleList = lazy(() => import('./people/PeopleList.tsx'));
@@ -62,94 +63,50 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
     <div className="text-center py-8 text-sm text-gray-500">Loading {label}...</div>
   );
 
+  const tabs: Array<{
+    id: 'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'settings';
+    label: string;
+    hidden?: boolean;
+  }> = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'upload', label: 'Upload People' },
+    { id: 'people', label: 'All People' },
+    { id: 'upcoming', label: 'Upcoming Birthdays', hidden: !hasFirstSend },
+    { id: 'templates', label: 'Email Templates' },
+    { id: 'moments', label: 'Moments' },
+    { id: 'settings', label: 'Settings' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold">MomentOS</h1>
-          <button
-            onClick={onLogout}
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
+    <div className="ds-page">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white">
+              MO
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900">MomentOS</h1>
+              <p className="text-xs text-slate-500">Celebration automation workspace</p>
+            </div>
+          </div>
+          <Button onClick={onLogout} variant="secondary" size="sm">
             Sign out
-          </button>
+          </Button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex gap-2 sm:gap-4 mb-6 border-b overflow-x-auto whitespace-nowrap">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`pb-2 px-4 ${
-              activeTab === 'dashboard'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`pb-2 px-4 ${
-              activeTab === 'upload'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Upload People
-          </button>
-          <button
-            onClick={() => setActiveTab('people')}
-            className={`pb-2 px-4 ${
-              activeTab === 'people'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            All People
-          </button>
-          {hasFirstSend && (
+      <main className="mx-auto w-full max-w-7xl px-4 py-8">
+        <div className="mb-6 ds-tablist">
+          {tabs.filter((tab) => !tab.hidden).map((tab) => (
             <button
-              onClick={() => setActiveTab('upcoming')}
-              className={`pb-2 px-4 ${
-                activeTab === 'upcoming'
-                  ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn('ds-tab', activeTab === tab.id && 'ds-tab-active')}
             >
-              Upcoming Birthdays
+              {tab.label}
             </button>
-          )}
-          <button
-            onClick={() => setActiveTab('templates')}
-            className={`pb-2 px-4 ${
-              activeTab === 'templates'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Email Templates
-          </button>
-          <button
-            onClick={() => setActiveTab('moments')}
-            className={`pb-2 px-4 ${
-              activeTab === 'moments'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Moments
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`pb-2 px-4 ${
-              activeTab === 'settings'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-medium'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Settings
-          </button>
+          ))}
         </div>
 
         {activeTab === 'dashboard' && (

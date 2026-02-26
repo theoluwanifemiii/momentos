@@ -119,8 +119,15 @@ export const isTrustedOrigin = (
 
 export const createRateLimiter = (options: RateLimiterOptions) => {
   const buckets = new Map<string, RateLimitBucket>();
+  const rateLimitEnabled =
+    process.env.NODE_ENV === "production" ||
+    process.env.ENABLE_RATE_LIMITS === "true";
 
   return (req: Request, res: Response, next: NextFunction) => {
+    if (!rateLimitEnabled) {
+      return next();
+    }
+
     const now = Date.now();
     const baseKey = options.keyGenerator
       ? options.keyGenerator(req)

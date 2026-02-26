@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api';
+import { Button, Input } from '../ui';
+import AuthContainer from './AuthContainer';
 
 type ForgotPasswordFormProps = {
   onSuccess: (email: string) => void;
@@ -33,34 +35,29 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
   };
 
   return (
-    <div className="bg-white p-8 rounded-lg shadow">
-      <h1 className="text-2xl font-bold mb-6">Reset your password</h1>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="you@example.com"
-          />
-        </div>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {message && <p className="text-green-700 text-sm">{message}</p>}
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Sending...' : 'Send reset code'}
-        </button>
-      </div>
-      <p className="mt-4 text-center text-sm">
-        <button onClick={onBackToLogin} className="text-blue-600 hover:underline">
+    <AuthContainer
+      title="Reset your password"
+      subtitle="Enter your account email to receive a reset code."
+      footer={(
+        <button type="button" onClick={onBackToLogin} className="ds-link">
           Back to login
         </button>
-      </p>
-    </div>
+      )}
+    >
+      <div>
+        <label className="ds-label">Email</label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
+      </div>
+      {error && <p className="ds-alert ds-alert-error">{error}</p>}
+      {message && <p className="ds-alert ds-alert-success">{message}</p>}
+      <Button onClick={handleSubmit} disabled={loading} fullWidth>
+        {loading ? 'Sending...' : 'Send reset code'}
+      </Button>
+    </AuthContainer>
   );
 }

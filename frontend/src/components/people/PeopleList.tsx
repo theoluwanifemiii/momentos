@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../api';
 import { OnboardingState } from '../../types/onboarding';
 import NextStepPanel from '../onboarding/NextStepPanel';
 import OnboardingBanner from '../onboarding/OnboardingBanner';
+import { Button, Card, CardBody, CardHeader } from '../ui';
 
 // People: list records, manual add, and send birthday email now.
 type PeopleListProps = {
@@ -36,9 +38,47 @@ export default function PeopleList({
   });
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<{
+    person: any;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    birthday: '',
+    department: '',
+    role: '',
+  });
+  const [editFormError, setEditFormError] = useState('');
 
   useEffect(() => {
     loadPeople();
+  }, []);
+
+  useEffect(() => {
+    const closeActionMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-action-menu-root="true"]')) {
+        return;
+      }
+      setActionMenu(null);
+    };
+
+    const closeOnViewportChange = () => setActionMenu(null);
+
+    window.addEventListener('click', closeActionMenu);
+    window.addEventListener('resize', closeOnViewportChange);
+    window.addEventListener('scroll', closeOnViewportChange, true);
+    return () => {
+      window.removeEventListener('click', closeActionMenu);
+      window.removeEventListener('resize', closeOnViewportChange);
+      window.removeEventListener('scroll', closeOnViewportChange, true);
+    };
   }, []);
 
   const loadPeople = async () => {
@@ -199,20 +239,106 @@ export default function PeopleList({
     }
   };
 
+  const openEditModal = (person: any) => {
+    const fullName = (person.fullName || '').trim();
+    const fallbackFirstName = fullName.split(/\s+/).filter(Boolean)[0] || '';
+    const firstName = (person.firstName || '').trim() || fallbackFirstName;
+    const lastName = firstName
+      ? fullName.slice(firstName.length).trim()
+      : fullName.split(/\s+/).slice(1).join(' ');
+    const birthdayDate = new Date(person.birthday);
+
+    setEditingPersonId(person.id);
+    setEditForm({
+      firstName,
+      lastName,
+      email: person.email || '',
+      phone: person.phone || '',
+      birthday: Number.isNaN(birthdayDate.getTime())
+        ? ''
+        : birthdayDate.toISOString().slice(0, 10),
+      department: person.department || '',
+      role: person.role || '',
+    });
+    setEditFormError('');
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingPersonId(null);
+    setEditFormError('');
+  };
+
+  const handleUpdatePerson = async () => {
+    if (!editingPersonId) return;
+
+    setEditFormError('');
+    if (!editForm.firstName || !editForm.lastName || !editForm.email || !editForm.birthday) {
+      setEditFormError('First name, last name, email, and birthday are required.');
+      return;
+    }
+
+    try {
+      await api.call(`/people/${editingPersonId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          firstName: editForm.firstName || undefined,
+          fullName: `${editForm.firstName} ${editForm.lastName}`.trim(),
+          email: editForm.email,
+          phone: editForm.phone || null,
+          birthday: editForm.birthday,
+          department: editForm.department || undefined,
+          role: editForm.role || undefined,
+        }),
+      });
+
+      setSendMessage('Person details updated.');
+      closeEditModal();
+      await loadPeople();
+    } catch (err: any) {
+      setEditFormError(err.message || 'Failed to update person.');
+    }
+  };
+
+  const toggleActionMenu = (person: any, trigger: HTMLButtonElement) => {
+    setActionMenu((current) => {
+      if (current && String(current.person?.id) === String(person?.id)) {
+        return null;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = 176; // ui-dropdown width (w-44)
+      const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+      const left = Math.max(8, Math.min(maxLeft, rect.right + 8));
+      const top = Math.max(8, Math.min(window.innerHeight - 160, rect.top));
+
+      return {
+        person,
+        top,
+        left,
+      };
+    });
+  };
+
+  const actionPerson = actionMenu?.person ?? null;
+
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
 
   if (listError) {
     return (
-      <div className="bg-white p-8 rounded-lg shadow text-center">
+      <div className="ds-surface p-8 text-center">
         <p className="text-red-600">{listError}</p>
-        <button
+        <Button
           onClick={loadPeople}
-          className="mt-4 text-blue-600 hover:underline"
+          variant="ghost"
+          size="sm"
+          className="mt-4"
         >
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -228,94 +354,95 @@ export default function PeopleList({
           />
         )}
         <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
-        <div className="bg-white p-8 rounded-lg shadow text-center">
+        <div className="ds-surface p-8 text-center">
           <p className="text-gray-600">No people added yet. Upload a CSV or add one manually.</p>
-          <button
+          <Button
             onClick={() => setShowAddModal(true)}
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+            className="mt-4"
           >
             Add Person
-          </button>
+          </Button>
           {showAddModal && (
-            <div className="fixed inset-0 z-50">
+            <div className="ds-modal-shell">
               <div
-                className="absolute inset-0 bg-black/40"
+                className="ds-modal-backdrop"
                 onClick={() => setShowAddModal(false)}
               />
-              <div className="absolute inset-0 flex items-center justify-center p-4">
-                <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
-                  <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div className="ds-modal-position">
+                <div className="ds-modal-panel">
+                  <div className="ds-modal-header">
                     <h3 className="text-lg font-bold">Add Person</h3>
-                    <button
+                    <Button
                       onClick={() => setShowAddModal(false)}
-                      className="text-sm text-gray-600 hover:text-gray-900"
+                      variant="ghost"
+                      size="sm"
                     >
                       Close
-                    </button>
+                    </Button>
                   </div>
-                  <div className="p-6">
+                  <div className="ds-card-body">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-1">First Name</label>
+                        <label className="ds-label">First Name</label>
                         <input
                           value={form.firstName}
                           onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="First name"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Last Name</label>
+                        <label className="ds-label">Last Name</label>
                         <input
                           value={form.lastName}
                           onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="Last name"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Email</label>
+                        <label className="ds-label">Email</label>
                         <input
                           type="email"
                           value={form.email}
                           onChange={(e) => setForm({ ...form, email: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="person@example.com"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Phone</label>
+                        <label className="ds-label">Phone</label>
                         <input
                           value={form.phone}
                           onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="+15551234567"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Birthday</label>
+                        <label className="ds-label">Birthday</label>
                         <input
                           type="date"
                           value={form.birthday}
                           onChange={(e) => setForm({ ...form, birthday: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Department</label>
+                        <label className="ds-label">Department</label>
                         <input
                           value={form.department}
                           onChange={(e) => setForm({ ...form, department: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="Department"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Role</label>
+                        <label className="ds-label">Role</label>
                         <input
                           value={form.role}
                           onChange={(e) => setForm({ ...form, role: e.target.value })}
-                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="ds-input"
                           placeholder="Role"
                         />
                       </div>
@@ -324,18 +451,17 @@ export default function PeopleList({
                     {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
 
                     <div className="mt-4 flex justify-end gap-3">
-                      <button
+                      <Button
                         onClick={() => setShowAddModal(false)}
-                        className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                        variant="secondary"
                       >
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={handleAddPerson}
-                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
                       >
                         Add Person
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -357,8 +483,8 @@ export default function PeopleList({
         />
       )}
       <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="overflow-hidden shadow-none">
+        <CardHeader className="flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-700">{sendMessage}</div>
           <div className="flex flex-wrap items-center gap-3">
             {selectedIds.length > 0 && (
@@ -366,40 +492,41 @@ export default function PeopleList({
                 <span className="text-gray-600">{selectedIds.length} selected</span>
                 <button
                   onClick={() => handleBulkOptOut(true)}
-                  className="text-blue-600 hover:underline"
+                  className="ds-link"
                 >
                   Bulk opt-out
                 </button>
                 <button
                   onClick={() => handleBulkOptOut(false)}
-                  className="text-blue-600 hover:underline"
+                  className="ds-link"
                 >
                   Bulk opt-in
                 </button>
                 <button
                   onClick={handleBulkDelete}
-                  className="text-red-600 hover:underline"
+                  className="text-sm font-medium text-red-600 hover:underline"
                 >
                   Delete selected
                 </button>
               </div>
             )}
-            <button
+            <Button
               onClick={handleExport}
-              className="text-sm text-blue-600 hover:underline"
+              variant="ghost"
+              size="sm"
             >
               Export CSV
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setShowAddModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
             >
               Add Person
-            </button>
+            </Button>
           </div>
-        </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-[900px] w-full divide-y divide-gray-200">
+        </CardHeader>
+      <CardBody className="p-0">
+      <div className="ds-table-wrap">
+        <table className="min-w-[900px] w-full ds-table">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -409,12 +536,12 @@ export default function PeopleList({
                   onChange={toggleSelectAll}
                 />
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Birthday</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="ds-th">Name</th>
+              <th className="ds-th">Email</th>
+              <th className="ds-th">Phone</th>
+              <th className="ds-th">Birthday</th>
+              <th className="ds-th">Department</th>
+              <th className="ds-th">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -427,128 +554,131 @@ export default function PeopleList({
                     onChange={() => toggleSelect(person.id)}
                   />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">{person.fullName}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{person.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="ds-td">{person.fullName}</td>
+                <td className="ds-td text-gray-600">{person.email}</td>
+                <td className="ds-td text-gray-600">
                   {person.phone || '—'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <td className="ds-td">
                   {new Date(person.birthday).toLocaleDateString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="ds-td text-gray-600">
                   {person.department || '—'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {allowManualSend ? (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={() => handleSendBirthday(person.id)}
-                        disabled={sendingAction === `${person.id}:email`}
-                        className="text-blue-600 hover:underline disabled:opacity-50 text-left"
+                <td className="ds-td">
+                  <div className="relative inline-block text-left" data-action-menu-root="true">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleActionMenu(person, e.currentTarget);
+                      }}
+                      className={`ds-icon-trigger ${
+                        actionMenu && String(actionMenu.person?.id) === String(person.id)
+                          ? 'bg-gray-50 text-gray-700'
+                          : ''
+                      }`}
+                      aria-label="Open row actions"
+                    >
+                      <svg
+                        className="h-3.5 w-3.5"
+                        viewBox="0 0 16 16"
+                        fill="currentColor"
+                        aria-hidden="true"
                       >
-                        {sendingAction === `${person.id}:email`
-                          ? 'Sending Email...'
-                          : 'Send Birthday Email Now'}
-                      </button>
-                      <button
-                        onClick={() => handleSendSms(person.id)}
-                        disabled={!person.phone || sendingAction === `${person.id}:sms`}
-                        className="text-blue-600 hover:underline disabled:opacity-50 disabled:text-gray-400 text-left"
-                      >
-                        {sendingAction === `${person.id}:sms`
-                          ? 'Sending SMS...'
-                          : 'Send Birthday SMS Now'}
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400">Unlock after first send</span>
-                  )}
+                        <circle cx="3" cy="8" r="1.25" />
+                        <circle cx="8" cy="8" r="1.25" />
+                        <circle cx="13" cy="8" r="1.25" />
+                      </svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      </CardBody>
       {showAddModal && (
-        <div className="fixed inset-0 z-50">
+        <div className="ds-modal-shell">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="ds-modal-backdrop"
             onClick={() => setShowAddModal(false)}
           />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="ds-modal-position">
+            <div className="ds-modal-panel">
+              <div className="ds-modal-header">
                 <h3 className="text-lg font-bold">Add Person</h3>
-                <button
+                <Button
                   onClick={() => setShowAddModal(false)}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  variant="ghost"
+                  size="sm"
                 >
                   Close
-                </button>
+                </Button>
               </div>
-              <div className="p-6">
+              <div className="ds-card-body">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">First Name</label>
+                    <label className="ds-label">First Name</label>
                     <input
                       value={form.firstName}
                       onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="First name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Last Name</label>
+                    <label className="ds-label">Last Name</label>
                     <input
                       value={form.lastName}
                       onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="Last name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Email</label>
+                    <label className="ds-label">Email</label>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="person@example.com"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Phone</label>
+                    <label className="ds-label">Phone</label>
                     <input
                       value={form.phone}
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="+15551234567"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Birthday</label>
+                    <label className="ds-label">Birthday</label>
                     <input
                       type="date"
                       value={form.birthday}
                       onChange={(e) => setForm({ ...form, birthday: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Department</label>
+                    <label className="ds-label">Department</label>
                     <input
                       value={form.department}
                       onChange={(e) => setForm({ ...form, department: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="Department"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Role</label>
+                    <label className="ds-label">Role</label>
                     <input
                       value={form.role}
                       onChange={(e) => setForm({ ...form, role: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-input"
                       placeholder="Role"
                     />
                   </div>
@@ -557,25 +687,182 @@ export default function PeopleList({
                 {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
 
                 <div className="mt-4 flex justify-end gap-3">
-                  <button
+                  <Button
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                    variant="secondary"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleAddPerson}
-                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
                   >
                     Add Person
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
-      </div>
+      {actionMenu && actionPerson && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="ds-dropdown"
+              style={{ top: actionMenu.top, left: actionMenu.left }}
+              onClick={(e) => e.stopPropagation()}
+              data-action-menu-root="true"
+            >
+              <button
+                onClick={() => {
+                  openEditModal(actionPerson);
+                  setActionMenu(null);
+                }}
+                className="ds-dropdown-item"
+              >
+                Edit Person
+              </button>
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handleSendBirthday(actionPerson.id);
+                }}
+                disabled={
+                  !allowManualSend ||
+                  sendingAction === `${actionPerson.id}:email`
+                }
+                className="ds-dropdown-item"
+              >
+                {sendingAction === `${actionPerson.id}:email`
+                  ? 'Sending Email...'
+                  : 'Send Birthday Email'}
+              </button>
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handleSendSms(actionPerson.id);
+                }}
+                disabled={
+                  !allowManualSend ||
+                  !actionPerson.phone ||
+                  sendingAction === `${actionPerson.id}:sms`
+                }
+                className="ds-dropdown-item"
+              >
+                {sendingAction === `${actionPerson.id}:sms`
+                  ? 'Sending SMS...'
+                  : 'Send Birthday SMS'}
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
+      {showEditModal && (
+        <div className="ds-modal-shell">
+          <div
+            className="ds-modal-backdrop"
+            onClick={closeEditModal}
+          />
+          <div className="ds-modal-position">
+            <div className="ds-modal-panel">
+              <div className="ds-modal-header">
+                <h3 className="text-lg font-bold">Edit Person</h3>
+                <Button
+                  onClick={closeEditModal}
+                  variant="ghost"
+                  size="sm"
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="ds-card-body">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="ds-label">First Name</label>
+                    <input
+                      value={editForm.firstName}
+                      onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                      className="ds-input"
+                      placeholder="First name"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Last Name</label>
+                    <input
+                      value={editForm.lastName}
+                      onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                      className="ds-input"
+                      placeholder="Last name"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Email</label>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      className="ds-input"
+                      placeholder="person@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Phone</label>
+                    <input
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                      className="ds-input"
+                      placeholder="+15551234567"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Birthday</label>
+                    <input
+                      type="date"
+                      value={editForm.birthday}
+                      onChange={(e) => setEditForm({ ...editForm, birthday: e.target.value })}
+                      className="ds-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Department</label>
+                    <input
+                      value={editForm.department}
+                      onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                      className="ds-input"
+                      placeholder="Department"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Role</label>
+                    <input
+                      value={editForm.role}
+                      onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                      className="ds-input"
+                      placeholder="Role"
+                    />
+                  </div>
+                </div>
+
+                {editFormError && <p className="mt-3 text-sm text-red-600">{editFormError}</p>}
+
+                <div className="mt-4 flex justify-end gap-3">
+                  <Button
+                    onClick={closeEditModal}
+                    variant="secondary"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdatePerson}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      </Card>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { api, API_URL } from '../../api';
 import { OnboardingState } from '../../types/onboarding';
 import NextStepPanel from '../onboarding/NextStepPanel';
 import OnboardingBanner from '../onboarding/OnboardingBanner';
+import { Button, Card, CardBody, CardHeader } from '../ui';
 
 // People: upload CSV for bulk creation.
 type CSVUploadProps = {
@@ -66,19 +67,15 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Upload People</h2>
-
-      <div className="mb-4">
-        <button
-          onClick={downloadSample}
-          className="text-sm text-blue-600 hover:underline"
-        >
+    <Card>
+      <CardHeader>
+        <h2 className="text-xl font-bold">Upload People</h2>
+        <Button onClick={downloadSample} variant="ghost" size="sm">
           Download sample CSV
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
 
-      <div className="space-y-4">
+      <CardBody className="space-y-4">
         {successMessage && (
           <OnboardingBanner
             title="Upload complete"
@@ -91,48 +88,43 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
           onSelectTab={onSelectTab}
         />
         <div>
-          <label className="block text-sm font-medium mb-2">Select CSV File</label>
+          <label className="ds-label mb-2">Select CSV File</label>
           <input
             type="file"
             accept=".csv"
             onChange={handleFileUpload}
-            className="block w-full text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded file:border-0
-              file:text-sm file:font-medium
-              file:bg-blue-50 file:text-blue-700
-              hover:file:bg-blue-100"
+            className="ds-file-input"
           />
         </div>
 
         {csvContent && (
           <>
             <div>
-              <label className="block text-sm font-medium mb-2">Preview</label>
+              <label className="ds-label mb-2">Preview</label>
               <textarea
                 value={csvContent.slice(0, 500) + (csvContent.length > 500 ? '...' : '')}
                 readOnly
-                className="w-full h-32 px-3 py-2 border rounded bg-gray-50 text-sm font-mono"
+                className="ds-textarea h-32 bg-slate-50 font-mono"
               />
             </div>
 
-            <button
+            <Button
               onClick={handleSubmit}
               disabled={loading}
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {loading ? 'Uploading...' : 'Upload & Validate'}
-            </button>
+            </Button>
           </>
         )}
 
         {result && (
-          <div className={`p-4 rounded ${result.error ? 'bg-red-50' : 'bg-green-50'}`}>
+          <div className={result.error ? 'ds-alert ds-alert-error' : 'ds-alert ds-alert-success'}>
             {result.error ? (
-              <p className="text-red-800 font-medium">{result.error}</p>
+              <p className="font-medium">{result.error}</p>
             ) : (
               <div>
-                <p className="text-green-800 font-medium mb-2">Upload Summary</p>
+                <p className="mb-2 font-medium">Upload Summary</p>
                 <ul className="text-sm space-y-1">
                   <li>Valid rows: {result.summary.validRows}</li>
                   <li>Error rows: {result.summary.errorRows}</li>
@@ -143,7 +135,7 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
                     <p className="font-medium text-sm mb-2">Errors:</p>
                     <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
                       {result.errors.map((err: any, i: number) => (
-                        <li key={i} className="text-red-700">
+                        <li key={i} className="text-red-700/90">
                           Row {err.row}: {err.message}
                         </li>
                       ))}
@@ -155,7 +147,7 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
                     <p className="font-medium text-sm mb-2">AI Suggestions:</p>
                     <ul className="text-sm space-y-1">
                       {result.aiSuggestions.map((suggestion: string, i: number) => (
-                        <li key={i} className="text-blue-700">
+                        <li key={i} className="text-blue-700/90">
                           {suggestion}
                         </li>
                       ))}
@@ -166,7 +158,7 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
             )}
           </div>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }

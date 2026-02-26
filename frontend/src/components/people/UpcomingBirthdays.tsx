@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { Button, Card, CardBody } from '../ui';
 
 // People: show upcoming birthdays for the next 30 days.
 export default function UpcomingBirthdays() {
@@ -30,21 +31,23 @@ export default function UpcomingBirthdays() {
 
   if (error) {
     return (
-      <div className="bg-white p-8 rounded-lg shadow text-center">
+      <div className="ds-surface p-8 text-center">
         <p className="text-red-600">{error}</p>
-        <button
+        <Button
           onClick={loadUpcoming}
-          className="mt-4 text-blue-600 hover:underline"
+          variant="ghost"
+          size="sm"
+          className="mt-4"
         >
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
 
   if (upcoming.length === 0) {
     return (
-      <div className="bg-white p-8 rounded-lg shadow text-center">
+      <div className="ds-surface p-8 text-center">
         <p className="text-gray-600">No upcoming birthdays in the next 30 days.</p>
       </div>
     );
@@ -53,7 +56,8 @@ export default function UpcomingBirthdays() {
   return (
     <div className="space-y-4">
       {upcoming.map((person) => (
-        <div key={person.id} className="bg-white p-6 rounded-lg shadow">
+        <Card key={person.id}>
+          <CardBody>
           <div className="flex justify-between items-start">
             <div>
               <h3 className="text-lg font-medium">{person.fullName}</h3>
@@ -68,7 +72,8 @@ export default function UpcomingBirthdays() {
               </p>
             </div>
           </div>
-        </div>
+          </CardBody>
+        </Card>
       ))}
     </div>
   );

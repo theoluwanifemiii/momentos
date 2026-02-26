@@ -45,8 +45,9 @@ export default function MomentOSApp() {
   };
 
   const AuthLayout = ({ children }: { children: ReactNode }) => (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
+    <main className="ds-page relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(59,130,246,0.15),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(99,102,241,0.12),transparent_28%),radial-gradient(circle_at_60%_85%,rgba(6,182,212,0.12),transparent_26%)]" />
+      <div className="relative w-full max-w-md">
         <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
           {children}
         </Suspense>
