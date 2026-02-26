@@ -25,6 +25,7 @@ const AdminTemplates = lazy(() => import('./components/internalAdmin/pages/Templ
 const AdminDeliveryLogs = lazy(() => import('./components/internalAdmin/pages/DeliveryLogs.tsx'));
 const AdminAuditLogs = lazy(() => import('./components/internalAdmin/pages/AuditLogs.tsx'));
 const AdminStaff = lazy(() => import('./components/internalAdmin/pages/Staff.tsx'));
+const AdminFeedback = lazy(() => import('./components/internalAdmin/pages/Feedback.tsx'));
 
 // App shell: auth flow switcher and dashboard entry point.
 export default function MomentOSApp() {
@@ -211,6 +212,7 @@ export default function MomentOSApp() {
             <Route path="templates" element={<AdminTemplates />} />
             <Route path="delivery-logs" element={<AdminDeliveryLogs />} />
             <Route path="audit-logs" element={<AdminAuditLogs />} />
+            <Route path="feedback" element={<AdminFeedback />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

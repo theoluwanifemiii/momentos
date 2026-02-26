@@ -5,14 +5,15 @@ This is the shared UI contract for frontend screens.
 ## 1) Foundations
 
 - Typography
-  - Body: `Inter`
-  - Display: `Space Grotesk` (for major headings)
+  - Body: `DM Sans`
+  - Display: `Syne` (for major headings)
 - Color intent
-  - Brand action: `brand-600`
-  - Neutral text: `ink-900` / `ink-700`
-  - Surface: `white`, muted surface `ink-50`
-  - Border: `ink-200`
-  - Danger: `danger-600`
+  - Primary actions: `blue.base` / `blue.700`
+  - Neutral text: `slate.800` / `slate.700`
+  - Surface border: `slate.200`
+  - Success: `green.base`
+  - Warning: `amber.base`
+  - Danger: `red.base`
 - Radius
   - Standard: `rounded-ds`
   - Elevated card/modal: `rounded-ds-lg`
@@ -101,5 +102,12 @@ import { Button, Card, CardBody, CardHeader, Input, Select } from '../components
 2. Move each page to `Card`/`Button` primitives.
 3. Remove old one-off classes only after all usages are migrated.
 
-Current first adopter:
+Current adopters:
+- `frontend/src/components/Dashboard.tsx`
+- `frontend/src/components/auth/*`
 - `frontend/src/components/people/PeopleList.tsx`
+- `frontend/src/components/people/CSVUpload.tsx`
+- `frontend/src/components/people/UpcomingBirthdays.tsx`
+- `frontend/src/components/Settings.tsx`
+- `frontend/src/components/Moments.tsx`
+- `frontend/src/components/Templates.tsx`

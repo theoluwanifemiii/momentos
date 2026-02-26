@@ -172,8 +172,8 @@ const landingMarkup = `
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
-            <label class="text-sm font-medium text-slate-700">Organization</label>
-            <input name="organization" type="text" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="Company or community">
+            <label class="text-sm font-medium text-slate-700">Team or Group</label>
+            <input name="organization" type="text" required class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none" placeholder="Team, church, or company">
           </div>
           <div>
             <label class="text-sm font-medium text-slate-700">Role</label>
@@ -469,7 +469,7 @@ const landingMarkup = `
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span class="text-lg text-slate-700">Use channel-aware templates with per-organization delivery toggles.</span>
+              <span class="text-lg text-slate-700">Use channel-aware templates with per-workspace delivery toggles.</span>
             </li>
             <li class="flex items-start gap-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-indigo-600 mt-0.5">
@@ -672,7 +672,7 @@ const landingMarkup = `
           </div>
           <div class="p-8">
             <h3 class="text-xl font-semibold text-slate-900 mb-2">Channel Controls</h3>
-            <p class="text-slate-500 leading-relaxed">Turn SMS and WhatsApp on or off per organization and keep delivery behavior predictable.</p>
+            <p class="text-slate-500 leading-relaxed">Turn SMS and WhatsApp on or off per workspace and keep delivery behavior predictable.</p>
           </div>
         </div>
 
@@ -957,7 +957,7 @@ const landingMarkup = `
             Who It’s For
           </div>
           <h3 class="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight mt-5 mb-6 reveal" data-reveal data-reveal-delay="80ms">Teams that care about moments and momentum.</h3>
-          <p class="text-lg text-slate-600 mb-10 max-w-xl reveal" data-reveal data-reveal-delay="140ms">MomentOS is built for organizations that want consistency without extra work.</p>
+          <p class="text-lg text-slate-600 mb-10 max-w-xl reveal" data-reveal data-reveal-delay="140ms">MomentOS is built for teams and communities that want consistency without extra work.</p>
 
           <div class="grid sm:grid-cols-2 gap-4">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 reveal" data-reveal data-reveal-delay="200ms">
@@ -1014,7 +1014,7 @@ const landingMarkup = `
                 </div>
                 <div class="text-sm font-semibold text-slate-900">Nonprofits</div>
               </div>
-              <p class="text-sm text-slate-600">Organizations with distributed teams and volunteer networks.</p>
+              <p class="text-sm text-slate-600">Teams with distributed members and volunteer networks.</p>
             </div>
           </div>
         </div>
@@ -1147,7 +1147,7 @@ const landingMarkup = `
 
         <div class="bg-slate-900 rounded-3xl border border-slate-900 p-8 shadow-xl shadow-slate-900/20 text-white flex flex-col">
           <div class="flex items-center justify-between">
-            <h3 class="text-xl font-semibold">Organization</h3>
+            <h3 class="text-xl font-semibold">Workspace</h3>
             <span class="text-xs font-semibold text-white bg-white/10 border border-white/20 px-2 py-1 rounded-full">1-month free trial</span>
           </div>
           <p class="text-slate-300 mt-2">For teams that need reliability at scale</p>

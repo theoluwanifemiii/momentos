@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { adminApi } from "../../../api";
+import { Button, Card, CardBody, cn } from "../../ui";
 import AdminPage from "../ui/AdminPage";
 
 type AdminContext = {
@@ -64,148 +65,155 @@ export default function OrganizationDetail() {
 
   const toggleUser = async (userId: string, enabled: boolean) => {
     if (!id) return;
-    await adminApi.call(`/orgs/${id}/users/${userId}/${enabled ? "enable" : "disable"}`, {
-      method: "PATCH",
-    });
-    load();
+    setError("");
+    try {
+      await adminApi.call(`/orgs/${id}/users/${userId}/${enabled ? "enable" : "disable"}`, {
+        method: "PATCH",
+      });
+      await load();
+    } catch (err: any) {
+      setError(err.message || "Failed to update user status");
+    }
   };
 
   const verifyUser = async (userId: string) => {
     if (!id) return;
-    await adminApi.call(`/orgs/${id}/users/${userId}/verify`, { method: "PATCH" });
-    load();
+    setError("");
+    try {
+      await adminApi.call(`/orgs/${id}/users/${userId}/verify`, { method: "PATCH" });
+      await load();
+    } catch (err: any) {
+      setError(err.message || "Failed to verify user");
+    }
   };
-
-  if (!org) {
-    return (
-      <div className="space-y-4">
-        <div className="text-sm text-slate-500">Organization not found.</div>
-        <button
-          onClick={() => navigate("/admin/orgs")}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium"
-        >
-          Back
-        </button>
-      </div>
-    );
-  }
 
   return (
     <AdminPage
-      title={org.name}
-      description={`${org.emailFromAddress || "Default sender"} · ${org.timezone}`}
+      title={org?.name || "Organization"}
+      description={
+        org
+          ? `${org.emailFromAddress || "Default sender"} · ${org.timezone}`
+          : "Organization details and account management."
+      }
       loading={loading}
       loadingLabel="Loading org…"
       error={error}
       actions={
-        <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            org.isSuspended
-              ? "bg-rose-50 text-rose-700"
-              : "bg-emerald-50 text-emerald-700"
-          }`}
-        >
-          {org.isSuspended ? "Suspended" : "Active"}
-        </span>
+        org ? (
+          <span
+            className={cn(
+              "admin-status-pill",
+              org.isSuspended ? "admin-status-pill-danger" : "admin-status-pill-success",
+            )}
+          >
+            {org.isSuspended ? "Suspended" : "Active"}
+          </span>
+        ) : null
       }
     >
-      <button
-        onClick={() => navigate("/admin/orgs")}
-        className="text-xs uppercase tracking-wider text-slate-400"
-      >
+      <Button onClick={() => navigate("/admin/orgs")} variant="ghost" size="sm" className="px-0">
         ← Back to organizations
-      </button>
+      </Button>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {[
-          { label: "Plan", value: org.plan },
-          { label: "Users", value: org.counts.users },
-          { label: "People", value: org.counts.people },
-          { label: "Templates", value: org.counts.templates },
-          { label: "Created", value: new Date(org.createdAt).toLocaleDateString() },
-          { label: "Updated", value: new Date(org.updatedAt).toLocaleDateString() },
-        ].map((item) => (
-          <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs uppercase tracking-wider text-slate-400">{item.label}</div>
-            <div className="text-lg font-semibold text-slate-900 mt-2">{item.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Users</h2>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Role</th>
-              <th className="px-4 py-3 text-left">Verified</th>
-              <th className="px-4 py-3 text-left">Last Login</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td className="px-4 py-3 text-slate-700">{user.email}</td>
-                <td className="px-4 py-3 text-slate-600">{user.role}</td>
-                <td className="px-4 py-3 text-slate-600">
-                  {user.emailVerifiedAt ? "Yes" : "No"}
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {user.lastLoginAt
-                    ? new Date(user.lastLoginAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {user.isDisabled ? (
-                    <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
-                      Disabled
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                      Active
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    {!user.emailVerifiedAt ? (
-                      <button
-                        onClick={() => verifyUser(user.id)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        Verify
-                      </button>
-                    ) : null}
-                    <button
-                      onClick={() => toggleUser(user.id, user.isDisabled)}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      {user.isDisabled ? "Enable" : "Disable"}
-                    </button>
-                    {admin?.role === "SUPER_ADMIN" ? (
-                      <button className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-400">
-                        Force Reset
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
+      {org ? (
+        <>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { label: "Plan", value: org.plan },
+              { label: "Users", value: org.counts.users },
+              { label: "People", value: org.counts.people },
+              { label: "Templates", value: org.counts.templates },
+              { label: "Created", value: new Date(org.createdAt).toLocaleDateString() },
+              { label: "Updated", value: new Date(org.updatedAt).toLocaleDateString() },
+            ].map((item) => (
+              <Card key={item.label}>
+                <CardBody className="space-y-2 p-5">
+                  <div className="text-xs uppercase tracking-wider text-slate-400">{item.label}</div>
+                  <div className="text-lg font-semibold text-slate-900">{item.value}</div>
+                </CardBody>
+              </Card>
             ))}
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No users found.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          <div className="admin-panel overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Users</h2>
+            </div>
+            <div className="ds-table-wrap">
+              <table className="ds-table">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="ds-th">Email</th>
+                    <th className="ds-th">Role</th>
+                    <th className="ds-th">Verified</th>
+                    <th className="ds-th">Last Login</th>
+                    <th className="ds-th">Status</th>
+                    <th className="ds-th text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {users.map((user) => (
+                    <tr key={user.id} className="admin-table-row">
+                      <td className="ds-td">{user.email}</td>
+                      <td className="ds-td">{user.role}</td>
+                      <td className="ds-td">{user.emailVerifiedAt ? "Yes" : "No"}</td>
+                      <td className="ds-td">
+                        {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="ds-td">
+                        <span
+                          className={cn(
+                            "admin-status-pill",
+                            user.isDisabled ? "admin-status-pill-danger" : "admin-status-pill-success",
+                          )}
+                        >
+                          {user.isDisabled ? "Disabled" : "Active"}
+                        </span>
+                      </td>
+                      <td className="ds-td">
+                        <div className="flex justify-end gap-2">
+                          {!user.emailVerifiedAt ? (
+                            <Button
+                              onClick={() => verifyUser(user.id)}
+                              size="sm"
+                              variant="secondary"
+                            >
+                              Verify
+                            </Button>
+                          ) : null}
+                          <Button
+                            onClick={() => toggleUser(user.id, user.isDisabled)}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            {user.isDisabled ? "Enable" : "Disable"}
+                          </Button>
+                          {admin?.role === "SUPER_ADMIN" ? (
+                            <Button size="sm" variant="ghost" className="text-slate-400" disabled>
+                              Force Reset
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="ds-td py-10 text-center text-slate-500">
+                        No users found.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <Card>
+          <CardBody className="p-5 text-sm text-slate-500">Organization not found.</CardBody>
+        </Card>
+      )}
     </AdminPage>
   );
 }

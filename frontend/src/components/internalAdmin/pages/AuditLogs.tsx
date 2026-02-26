@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../../api";
+import { Button, Input } from "../../ui";
 import AdminPage from "../ui/AdminPage";
 
 type AuditLogRow = {
@@ -45,57 +46,54 @@ export default function AdminAuditLogs() {
       loadingLabel="Loading audit logs…"
       error={error}
       actions={
-        <>
-          <input
+        <div className="admin-toolbar">
+          <Input
             value={adminId}
             onChange={(event) => setAdminId(event.target.value)}
             placeholder="Admin ID"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-[190px]"
           />
-          <button
-            onClick={load}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
+          <Button onClick={load} variant="secondary">
             Apply
-          </button>
-        </>
+          </Button>
+        </div>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Action</th>
-              <th className="px-4 py-3 text-left">Target</th>
-              <th className="px-4 py-3 text-left">Admin</th>
-              <th className="px-4 py-3 text-left">Timestamp</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td className="px-4 py-3 text-slate-700">{log.action}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">
-                  {log.targetType ? `${log.targetType}:${log.targetId}` : "—"}
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {log.admin.email}
-                  <div className="text-xs text-slate-400">{log.admin.role}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {new Date(log.createdAt).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            {logs.length === 0 ? (
+      <div className="admin-panel overflow-hidden">
+        <div className="ds-table-wrap">
+          <table className="ds-table">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No audit logs found.
-                </td>
+                <th className="ds-th">Action</th>
+                <th className="ds-th">Target</th>
+                <th className="ds-th">Admin</th>
+                <th className="ds-th">Timestamp</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {logs.map((log) => (
+                <tr key={log.id} className="admin-table-row">
+                  <td className="ds-td font-medium text-slate-700">{log.action}</td>
+                  <td className="ds-td text-xs text-slate-500">
+                    {log.targetType ? `${log.targetType}:${log.targetId}` : "—"}
+                  </td>
+                  <td className="ds-td">
+                    <div>{log.admin.email}</div>
+                    <div className="text-xs text-slate-400">{log.admin.role}</div>
+                  </td>
+                  <td className="ds-td">{new Date(log.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="ds-td py-10 text-center text-slate-500">
+                    No audit logs found.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </AdminPage>
   );

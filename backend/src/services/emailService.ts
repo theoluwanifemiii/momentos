@@ -14,6 +14,7 @@ function getResendClient() {
 
 export interface EmailParams {
   to: string;
+  cc?: string | string[];
   subject: string;
   html?: string;
   text?: string;
@@ -31,6 +32,7 @@ export class EmailService {
       const result = await resend.emails.send({
         from: `${params.from.name} <${params.from.email}>`,
         to: params.to,
+        cc: params.cc,
         subject: params.subject,
         html: params.html,
         text: params.text ?? '',

@@ -8,8 +8,11 @@ type RegisterFormProps = {
   onSwitchToLogin: () => void;
 };
 
-// Auth: register org + admin, then route to verification if required.
+type AccountType = 'INDIVIDUAL' | 'ORGANIZATION';
+
+// Auth: register individual or organization workspace, then route to verification.
 export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) {
+  const [accountType, setAccountType] = useState<AccountType>('INDIVIDUAL');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,10 +20,11 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
   const [timezone, setTimezone] = useState('UTC');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const filledFieldClass = 'bg-slate-50 border-slate-200 focus:bg-white';
 
   const handleSubmit = async () => {
-    if (!organizationName || organizationName.trim() === '') {
-      setError('Organization name is required');
+    if (accountType === 'ORGANIZATION' && (!organizationName || organizationName.trim() === '')) {
+      setError('Organization or group name is required');
       return;
     }
     if (password.length < 8) {
@@ -36,9 +40,10 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       const data = await api.call('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
+          accountType,
           email: normalizedEmail,
           password,
-          organizationName,
+          organizationName: organizationName.trim() || undefined,
           timezone,
         }),
       });
@@ -53,7 +58,11 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
   return (
     <AuthContainer
       title="Create your account"
-      subtitle="Set up your organization and start automating celebrations."
+      subtitle={
+        accountType === 'ORGANIZATION'
+          ? 'Set up your organization workspace and start automating celebrations.'
+          : 'Set up your personal workspace and start automating celebrations.'
+      }
       footer={(
         <p className="text-slate-600">
           Already have an account?{' '}
@@ -64,13 +73,34 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       )}
     >
       <div>
-        <label className="ds-label">Organization Name</label>
+        <label className="ds-label">Account Type</label>
+        <Select
+          value={accountType}
+          onChange={(e) => {
+            setAccountType(e.target.value as AccountType);
+            setError('');
+          }}
+          className={filledFieldClass}
+        >
+          <option value="INDIVIDUAL">Individual</option>
+          <option value="ORGANIZATION">Organization</option>
+        </Select>
+      </div>
+      <div>
+        <label className="ds-label">
+          {accountType === 'ORGANIZATION' ? 'Organization or Group Name' : 'Workspace Name (Optional)'}
+        </label>
         <Input
           type="text"
           value={organizationName}
           onChange={(e) => setOrganizationName(e.target.value)}
-          placeholder="Your church or company"
-          required
+          className={filledFieldClass}
+          placeholder={
+            accountType === 'ORGANIZATION'
+              ? 'Your team, church, or company'
+              : "e.g. Ada's Workspace"
+          }
+          required={accountType === 'ORGANIZATION'}
         />
       </div>
       <div>
@@ -79,6 +109,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className={filledFieldClass}
           placeholder="admin@example.com"
         />
       </div>
@@ -89,7 +120,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="pr-20"
+            className={`pr-20 ${filledFieldClass}`}
             placeholder="••••••••"
           />
           <button
@@ -133,7 +164,11 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       </div>
       <div>
         <label className="ds-label">Timezone</label>
-        <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+        <Select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className={filledFieldClass}
+        >
           <option value="UTC">UTC</option>
           <option value="Africa/Lagos">Lagos (WAT)</option>
           <option value="America/New_York">New York (EST)</option>

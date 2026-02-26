@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../../api";
+import { Button, Input, cn } from "../../ui";
 import AdminPage from "../ui/AdminPage";
 
 type PersonRow = {
@@ -40,8 +41,13 @@ export default function AdminPeople() {
   }, []);
 
   const handleSend = async (id: string) => {
-    await adminApi.call(`/people/${id}/send-birthday`, { method: "POST" });
-    load();
+    setError("");
+    try {
+      await adminApi.call(`/people/${id}/send-birthday`, { method: "POST" });
+      await load();
+    } catch (err: any) {
+      setError(err.message || "Failed to queue send");
+    }
   };
 
   return (
@@ -52,87 +58,80 @@ export default function AdminPeople() {
       loadingLabel="Loading people…"
       error={error}
       actions={
-        <>
-          <input
+        <div className="admin-toolbar">
+          <Input
             value={filters.email}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, email: event.target.value }))
             }
             placeholder="Search by email"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-[220px]"
           />
-          <input
+          <Input
             value={filters.orgId}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, orgId: event.target.value }))
             }
             placeholder="Org ID"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-[160px]"
           />
-          <button
-            onClick={load}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
+          <Button onClick={load} variant="secondary">
             Apply
-          </button>
-        </>
+          </Button>
+        </div>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Phone</th>
-              <th className="px-4 py-3 text-left">Birthday</th>
-              <th className="px-4 py-3 text-left">Organization</th>
-              <th className="px-4 py-3 text-left">Opted Out</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {people.map((person) => (
-              <tr key={person.id}>
-                <td className="px-4 py-3 text-slate-700">{person.fullName}</td>
-                <td className="px-4 py-3 text-slate-600">{person.email}</td>
-                <td className="px-4 py-3 text-slate-600">{person.phone || "—"}</td>
-                <td className="px-4 py-3 text-slate-600">
-                  {new Date(person.birthday).toLocaleDateString()}
-                </td>
-                <td className="px-4 py-3 text-slate-600">{person.organization}</td>
-                <td className="px-4 py-3">
-                  {person.optedOut ? (
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                      Yes
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                      No
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => handleSend(person.id)}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      Send now
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {people.length === 0 ? (
+      <div className="admin-panel overflow-hidden">
+        <div className="ds-table-wrap">
+          <table className="ds-table">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No people found.
-                </td>
+                <th className="ds-th">Name</th>
+                <th className="ds-th">Email</th>
+                <th className="ds-th">Phone</th>
+                <th className="ds-th">Birthday</th>
+                <th className="ds-th">Organization</th>
+                <th className="ds-th">Opted Out</th>
+                <th className="ds-th text-right">Actions</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {people.map((person) => (
+                <tr key={person.id} className="admin-table-row">
+                  <td className="ds-td font-medium text-slate-700">{person.fullName}</td>
+                  <td className="ds-td">{person.email}</td>
+                  <td className="ds-td">{person.phone || "—"}</td>
+                  <td className="ds-td">{new Date(person.birthday).toLocaleDateString()}</td>
+                  <td className="ds-td">{person.organization}</td>
+                  <td className="ds-td">
+                    <span
+                      className={cn(
+                        "admin-status-pill",
+                        person.optedOut ? "admin-status-pill-muted" : "admin-status-pill-success",
+                      )}
+                    >
+                      {person.optedOut ? "Yes" : "No"}
+                    </span>
+                  </td>
+                  <td className="ds-td">
+                    <div className="flex justify-end">
+                      <Button onClick={() => handleSend(person.id)} size="sm" variant="secondary">
+                        Send now
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {people.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="ds-td py-10 text-center text-slate-500">
+                    No people found.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </AdminPage>
   );

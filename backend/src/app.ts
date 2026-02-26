@@ -20,6 +20,7 @@ import { registerAdminDashboardRoutes } from "./routes/AdminDashboard";
 import { registerAiRoutes } from "./routes/AI";
 import { registerMomentsRoutes } from "./routes/Moments";
 import { registerWebhookRoutes } from "./routes/Webhooks";
+import { registerFeedbackRoutes } from "./routes/Feedback";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -95,5 +96,6 @@ registerInternalAdminRoutes(app);
 registerAdminDashboardRoutes(app);
 registerAiRoutes(app);
 registerWebhookRoutes(app);
+registerFeedbackRoutes(app);
 
 export default app;

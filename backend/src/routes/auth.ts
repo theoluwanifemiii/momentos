@@ -48,6 +48,29 @@ const buildAppUrl = (path: string) => {
   return `${base}${normalizedPath}`;
 };
 
+const derivePersonalWorkspaceName = (email: string) => {
+  const localPart = email.split("@")[0] || "";
+  const cleanedLocalPart = localPart
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanedLocalPart) {
+    return "Personal Workspace";
+  }
+
+  const titleCased = cleanedLocalPart
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (segment) =>
+        `${segment.charAt(0).toUpperCase()}${segment.slice(1).toLowerCase()}`
+    )
+    .join(" ");
+
+  return `${titleCased}'s Workspace`;
+};
+
 const sendVerificationLink = async (params: {
   user: { id: string; email: string; organizationId: string };
 }) => {
@@ -392,7 +415,8 @@ export function registerAuthRoutes(app: Express) {
       const schema = z.object({
         email: z.string().email(),
         password: z.string().min(8),
-        organizationName: z.string().min(1),
+        accountType: z.enum(["ORGANIZATION", "INDIVIDUAL"]).default("ORGANIZATION"),
+        organizationName: z.string().trim().optional(),
         timezone: z.string().default("UTC"),
       });
 
@@ -415,6 +439,16 @@ export function registerAuthRoutes(app: Express) {
 
       const normalizedEmail = data.email.trim().toLowerCase();
       safeEmail = normalizedEmail;
+      const submittedOrganizationName = data.organizationName?.trim() || "";
+
+      if (data.accountType === "ORGANIZATION" && !submittedOrganizationName) {
+        return res
+          .status(400)
+          .json({ error: "Organization name is required for organization accounts." });
+      }
+
+      const resolvedOrganizationName =
+        submittedOrganizationName || derivePersonalWorkspaceName(normalizedEmail);
 
       const existing = await prisma.user.findUnique({
         where: { email: normalizedEmail },
@@ -428,7 +462,7 @@ export function registerAuthRoutes(app: Express) {
 
       const org = await prisma.organization.create({
         data: {
-          name: data.organizationName,
+          name: resolvedOrganizationName,
           timezone: data.timezone,
           users: {
             create: {
@@ -450,6 +484,7 @@ export function registerAuthRoutes(app: Express) {
       console.log("Register outcome:", {
         email: safeEmail,
         organizationId: org.id,
+        accountType: data.accountType,
         requestId,
         outcome: "success",
       });
@@ -464,6 +499,7 @@ export function registerAuthRoutes(app: Express) {
           id: org.id,
           name: org.name,
           timezone: org.timezone,
+          accountType: data.accountType,
         },
         requiresVerification: true,
         message: "Verification link sent to your email.",

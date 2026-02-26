@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { OnboardingState } from '../types/onboarding';
 import { Button, cn } from './ui';
+import FeedbackWidget from './feedback/FeedbackWidget';
 
 const CSVUpload = lazy(() => import('./people/CSVUpload.tsx'));
 const PeopleList = lazy(() => import('./people/PeopleList.tsx'));
@@ -173,10 +174,11 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
         )}
         {activeTab === 'moments' && (
           <Suspense fallback={renderFallback('moments')}>
-            <Moments api={api} />
+            <Moments api={api} onOpenPeople={() => setActiveTab('people')} />
           </Suspense>
         )}
       </main>
+      <FeedbackWidget api={api} />
     </div>
   );
 }

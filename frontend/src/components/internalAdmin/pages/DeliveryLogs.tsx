@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../../api";
+import { Button, Input, Select, cn } from "../../ui";
 import AdminPage from "../ui/AdminPage";
 
 type LogRow = {
@@ -15,6 +16,13 @@ type LogRow = {
   retryCount: number;
   externalId: string | null;
   createdAt: string;
+};
+
+const statusClassMap: Record<string, string> = {
+  SENT: "admin-status-pill-info",
+  DELIVERED: "admin-status-pill-success",
+  FAILED: "admin-status-pill-danger",
+  QUEUED: "admin-status-pill-muted",
 };
 
 export default function AdminDeliveryLogs() {
@@ -51,8 +59,13 @@ export default function AdminDeliveryLogs() {
   }, []);
 
   const handleRetry = async (id: string) => {
-    await adminApi.call(`/delivery-logs/${id}/retry`, { method: "POST" });
-    load();
+    setError("");
+    try {
+      await adminApi.call(`/delivery-logs/${id}/retry`, { method: "POST" });
+      await load();
+    } catch (err: any) {
+      setError(err.message || "Retry failed");
+    }
   };
 
   return (
@@ -63,107 +76,106 @@ export default function AdminDeliveryLogs() {
       loadingLabel="Loading logs…"
       error={error}
       actions={
-        <>
-          <select
+        <div className="admin-toolbar">
+          <Select
             value={filters.status}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, status: event.target.value }))
             }
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-[140px]"
           >
             <option value="">All statuses</option>
             <option value="SENT">Sent</option>
             <option value="DELIVERED">Delivered</option>
             <option value="FAILED">Failed</option>
             <option value="QUEUED">Queued</option>
-          </select>
-          <input
+          </Select>
+          <Input
             type="date"
             value={filters.dateFrom}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, dateFrom: event.target.value }))
             }
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
           />
-          <input
+          <Input
             type="date"
             value={filters.dateTo}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, dateTo: event.target.value }))
             }
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
           />
-          <input
+          <Input
             value={filters.orgId}
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, orgId: event.target.value }))
             }
             placeholder="Org ID"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="min-w-[160px]"
           />
-          <button
-            onClick={load}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
+          <Button onClick={load} variant="secondary">
             Apply
-          </button>
-        </>
+          </Button>
+        </div>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Recipient</th>
-              <th className="px-4 py-3 text-left">Template</th>
-              <th className="px-4 py-3 text-left">Org</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Sent</th>
-              <th className="px-4 py-3 text-left">Error</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-slate-700">{log.person.name}</div>
-                  <div className="text-xs text-slate-500">{log.person.email}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {log.template.name}
-                </td>
-                <td className="px-4 py-3 text-slate-600">{log.organization}</td>
-                <td className="px-4 py-3 text-slate-600">{log.status}</td>
-                <td className="px-4 py-3 text-slate-600">
-                  {log.sentAt ? new Date(log.sentAt).toLocaleString() : "—"}
-                </td>
-                <td className="px-4 py-3 text-xs text-rose-600">
-                  {log.errorMessage || "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end">
-                    {log.status === "FAILED" ? (
-                      <button
-                        onClick={() => handleRetry(log.id)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        Retry
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {logs.length === 0 ? (
+      <div className="admin-panel overflow-hidden">
+        <div className="ds-table-wrap">
+          <table className="ds-table">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No logs found.
-                </td>
+                <th className="ds-th">Recipient</th>
+                <th className="ds-th">Template</th>
+                <th className="ds-th">Organization</th>
+                <th className="ds-th">Status</th>
+                <th className="ds-th">Sent</th>
+                <th className="ds-th">Error</th>
+                <th className="ds-th text-right">Actions</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {logs.map((log) => (
+                <tr key={log.id} className="admin-table-row">
+                  <td className="ds-td">
+                    <div className="font-medium text-slate-700">{log.person.name}</div>
+                    <div className="text-xs text-slate-500">{log.person.email}</div>
+                  </td>
+                  <td className="ds-td">{log.template.name}</td>
+                  <td className="ds-td">{log.organization}</td>
+                  <td className="ds-td">
+                    <span
+                      className={cn(
+                        "admin-status-pill",
+                        statusClassMap[log.status] || "admin-status-pill-muted",
+                      )}
+                    >
+                      {log.status}
+                    </span>
+                  </td>
+                  <td className="ds-td">
+                    {log.sentAt ? new Date(log.sentAt).toLocaleString() : "—"}
+                  </td>
+                  <td className="ds-td text-xs text-rose-700">{log.errorMessage || "—"}</td>
+                  <td className="ds-td">
+                    <div className="flex justify-end">
+                      {log.status === "FAILED" ? (
+                        <Button onClick={() => handleRetry(log.id)} size="sm" variant="secondary">
+                          Retry
+                        </Button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="ds-td py-10 text-center text-slate-500">
+                    No logs found.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </AdminPage>
   );

@@ -507,23 +507,66 @@ class BirthdayScheduler {
     return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   }
 
+  private getMonthDelta(from: DateTime, to: DateTime) {
+    return (to.year - from.year) * 12 + (to.month - from.month);
+  }
+
+  private resolveRecurringDay(anchorDay: number, target: DateTime) {
+    const daysInMonth = target.daysInMonth || 31;
+    return Math.min(anchorDay, daysInMonth);
+  }
+
   private isMomentDueToday(moment: MomentForProcessing, orgNow: DateTime) {
     const eventDate = DateTime.fromJSDate(moment.eventDate, {
       zone: orgNow.zone,
-    });
+    }).startOf('day');
+    const today = orgNow.startOf('day');
 
     if (moment.recurrenceRule === MomentRecurrence.ONE_TIME) {
-      return eventDate.startOf('day').toISODate() === orgNow.startOf('day').toISODate();
+      return eventDate.toISODate() === today.toISODate();
+    }
+
+    if (eventDate > today) {
+      return false;
     }
 
     if (moment.recurrenceRule === MomentRecurrence.ANNUAL) {
-      if (eventDate.month === 2 && eventDate.day === 29 && !this.isLeapYear(orgNow.year)) {
-        return orgNow.month === 2 && orgNow.day === 28;
+      if (eventDate.month === 2 && eventDate.day === 29 && !this.isLeapYear(today.year)) {
+        return today.month === 2 && today.day === 28;
       }
-      return eventDate.month === orgNow.month && eventDate.day === orgNow.day;
+      return eventDate.month === today.month && eventDate.day === today.day;
     }
 
-    // Custom recurrence is roadmap-only; skip until recurrence rules are implemented.
+    if (moment.recurrenceRule === MomentRecurrence.DAILY) {
+      return true;
+    }
+
+    if (
+      moment.recurrenceRule === MomentRecurrence.MONTHLY ||
+      moment.recurrenceRule === MomentRecurrence.QUARTERLY ||
+      moment.recurrenceRule === MomentRecurrence.BI_YEARLY
+    ) {
+      const monthDelta = this.getMonthDelta(eventDate, today);
+      if (monthDelta < 0) return false;
+
+      const interval =
+        moment.recurrenceRule === MomentRecurrence.MONTHLY
+          ? 1
+          : moment.recurrenceRule === MomentRecurrence.QUARTERLY
+            ? 3
+            : 6;
+      if (monthDelta % interval !== 0) return false;
+
+      return today.day === this.resolveRecurringDay(eventDate.day, today);
+    }
+
+    if (moment.recurrenceRule === MomentRecurrence.CUSTOM) {
+      const intervalDays = moment.customIntervalDays;
+      if (!intervalDays || intervalDays < 1) return false;
+      const elapsedDays = Math.floor(today.diff(eventDate, 'days').days);
+      return elapsedDays >= 0 && elapsedDays % intervalDays === 0;
+    }
+
     return false;
   }
 
@@ -1248,15 +1291,34 @@ From everyone at {{organization_name}}`,
     );
     console.log(`Found ${dueMoments.length} due moments for organization ${org.id}`);
 
+    const availableTemplates = templateAssignments
+      .map((assignment) => assignment.template as TemplateRecord)
+      .filter(Boolean);
+
     for (const moment of dueMoments) {
-      const messageTemplate = (moment.template as TemplateRecord | null) || defaultTemplate;
-      if (!messageTemplate) {
+      const fallbackMomentTemplate =
+        (moment.template as TemplateRecord | null) || defaultTemplate;
+      if (!fallbackMomentTemplate && availableTemplates.length === 0) {
         console.warn(`Skipping moment ${moment.id}; no template available.`);
         continue;
       }
 
       for (const recipient of moment.recipients) {
         if (!recipient.person || recipient.person.optedOut) {
+          continue;
+        }
+
+        let messageTemplate = fallbackMomentTemplate;
+        if (
+          moment.randomizeMessage &&
+          moment.recurrenceRule !== MomentRecurrence.ONE_TIME &&
+          availableTemplates.length > 0
+        ) {
+          const randomIndex = Math.floor(Math.random() * availableTemplates.length);
+          messageTemplate = availableTemplates[randomIndex];
+        }
+
+        if (!messageTemplate) {
           continue;
         }
 

@@ -15,6 +15,17 @@ import {
   resolveFromEmail,
 } from "../serverContext";
 
+const DEFAULT_SYSTEM_TEMPLATE_NAMES = new Set([
+  "Simple Birthday",
+  "Professional Birthday",
+  "Fun & Colorful",
+  "Modern Gradient Birthday",
+  "Minimal & Elegant",
+  "Fun & Colorful (Party Theme)",
+  "Corporate Professional",
+  "Warm & Personal (Community Style)",
+]);
+
 export function registerTemplatesRoutes(app: Express) {
 // TEMPLATE ROUTES
 // ============================================================================
@@ -34,8 +45,43 @@ app.get(
         orderBy: { assignedAt: "desc" },
       });
 
+      const dedupedByTemplateKey = new Map<
+        string,
+        (typeof assignments)[number]
+      >();
+
+      assignments.forEach((assignment) => {
+        const dedupeKey =
+          assignment.template.isSystem &&
+          DEFAULT_SYSTEM_TEMPLATE_NAMES.has(assignment.template.name)
+            ? `system:${assignment.template.name}`
+            : `template:${assignment.template.id}`;
+
+        const existing = dedupedByTemplateKey.get(dedupeKey);
+        if (!existing) {
+          dedupedByTemplateKey.set(dedupeKey, assignment);
+          return;
+        }
+
+        if (assignment.isDefault && !existing.isDefault) {
+          dedupedByTemplateKey.set(dedupeKey, assignment);
+          return;
+        }
+
+        if (
+          assignment.isDefault === existing.isDefault &&
+          assignment.assignedAt > existing.assignedAt
+        ) {
+          dedupedByTemplateKey.set(dedupeKey, assignment);
+        }
+      });
+
+      const normalizedAssignments = Array.from(dedupedByTemplateKey.values()).sort(
+        (left, right) => right.assignedAt.getTime() - left.assignedAt.getTime()
+      );
+
       res.json({
-        templates: assignments.map((assignment) => ({
+        templates: normalizedAssignments.map((assignment) => ({
           ...assignment.template,
           isDefault: assignment.isDefault,
           isActive: assignment.isActive,
@@ -1011,40 +1057,61 @@ From everyone at {{organization_name}}`,
         },
       ];
 
+      const defaultTemplateNames = defaultTemplates.map((template) => template.name);
       const existingGlobals = await prisma.template.findMany({
-        where: { name: { in: defaultTemplates.map((template) => template.name) } },
+        where: {
+          isSystem: true,
+          name: { in: defaultTemplateNames },
+        },
+        orderBy: { createdAt: "asc" },
       });
-      const existingByName = new Map(
-        existingGlobals.map((template) => [template.name, template])
-      );
+      const existingByName = new Map<string, (typeof existingGlobals)[number]>();
+      existingGlobals.forEach((template) => {
+        if (!existingByName.has(template.name)) {
+          existingByName.set(template.name, template);
+        }
+      });
 
-      const createdGlobals = await Promise.all(
-        defaultTemplates
-          .filter((template) => !existingByName.has(template.name))
-          .map((template) =>
-            prisma.template.create({
-              data: {
-                ...template,
-                isActive: true,
-                isSystem: true,
-              },
-            })
-          )
-      );
+      for (const template of defaultTemplates) {
+        if (existingByName.has(template.name)) continue;
 
-      const globalTemplates = [
-        ...existingGlobals,
-        ...createdGlobals,
-      ];
+        const created = await prisma.template.create({
+          data: {
+            ...template,
+            isActive: true,
+            isSystem: true,
+          },
+        });
+        existingByName.set(created.name, created);
+      }
+
+      const globalTemplates = defaultTemplates
+        .map((template) => existingByName.get(template.name))
+        .filter((template): template is NonNullable<typeof template> =>
+          Boolean(template)
+        );
 
       const assignments = await prisma.organizationTemplate.findMany({
         where: { organizationId: req.organizationId! },
-        select: { templateId: true, isDefault: true },
+        select: {
+          templateId: true,
+          isDefault: true,
+          template: { select: { name: true, isSystem: true } },
+        },
       });
       const assignedIds = new Set(assignments.map((row) => row.templateId));
+      const assignedSystemTemplateNames = new Set(
+        assignments
+          .filter((row) => row.template.isSystem)
+          .map((row) => row.template.name)
+      );
 
       const assignmentData = globalTemplates
-        .filter((template) => !assignedIds.has(template.id))
+        .filter(
+          (template) =>
+            !assignedIds.has(template.id) &&
+            !assignedSystemTemplateNames.has(template.name)
+        )
         .map((template) => ({
           organizationId: req.organizationId!,
           templateId: template.id,

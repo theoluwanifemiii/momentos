@@ -234,6 +234,8 @@ model Moment {
   category            MomentCategory
   eventDate           DateTime
   recurrenceRule      MomentRecurrence  @default(ANNUAL)
+  customIntervalDays  Int?
+  randomizeMessage    Boolean           @default(false)
   deliveryChannels    DeliveryChannel[] @default([email])
   templateId          String?
   template            Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -305,6 +307,10 @@ enum MomentCategory {
 enum MomentRecurrence {
   ONE_TIME
   ANNUAL
+  DAILY
+  MONTHLY
+  QUARTERLY
+  BI_YEARLY
   CUSTOM
 }
 

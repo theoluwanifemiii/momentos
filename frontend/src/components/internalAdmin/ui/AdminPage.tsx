@@ -1,3 +1,5 @@
+import { Card, CardBody } from "../../ui";
+
 type AdminPageProps = {
   title: string;
   description?: string;
@@ -18,28 +20,24 @@ export default function AdminPage({
   children,
 }: AdminPageProps) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
           {description ? (
-            <p className="text-sm text-slate-500 mt-1">{description}</p>
+            <p className="mt-1 text-sm text-slate-500">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>
 
-      {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="ds-alert ds-alert-error">{error}</div> : null}
 
       {loading ? (
-        <div className="text-sm text-slate-500">{loadingLabel}</div>
-      ) : (
-        children
-      )}
+        <Card>
+          <CardBody className="p-5 text-sm text-slate-500">{loadingLabel}</CardBody>
+        </Card>
+      ) : children}
     </div>
   );
 }

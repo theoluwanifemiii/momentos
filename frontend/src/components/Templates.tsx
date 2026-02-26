@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { OnboardingState } from '../types/onboarding';
 import NextStepPanel from './onboarding/NextStepPanel';
 import OnboardingBanner from './onboarding/OnboardingBanner';
+import { Button, Card, CardBody, CardHeader, Input, Select } from './ui';
 
 type ApiClient = {
   call: (endpoint: string, options?: RequestInit) => Promise<any>;
@@ -29,6 +31,11 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [editorMode, setEditorMode] = useState<'plain' | 'code'>('plain');
+  const [actionMenu, setActionMenu] = useState<{
+    template: any;
+    top: number;
+    left: number;
+  } | null>(null);
   const [plainContent, setPlainContent] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -45,6 +52,27 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
 
   useEffect(() => {
     loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    const closeActionMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-action-menu-root="true"]')) {
+        return;
+      }
+      setActionMenu(null);
+    };
+
+    const closeOnViewportChange = () => setActionMenu(null);
+
+    window.addEventListener('click', closeActionMenu);
+    window.addEventListener('resize', closeOnViewportChange);
+    window.addEventListener('scroll', closeOnViewportChange, true);
+    return () => {
+      window.removeEventListener('click', closeActionMenu);
+      window.removeEventListener('resize', closeOnViewportChange);
+      window.removeEventListener('scroll', closeOnViewportChange, true);
+    };
   }, []);
 
   const stripHtml = (value: string) => value.replace(/<[^>]*>/g, '').trim();
@@ -339,6 +367,28 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     }
   };
 
+  const toggleActionMenu = (template: any, trigger: HTMLButtonElement) => {
+    setActionMenu((current) => {
+      if (current && String(current.template?.id) === String(template?.id)) {
+        return null;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = 176; // ds-dropdown width (w-44)
+      const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+      const left = Math.max(8, Math.min(maxLeft, rect.right + 8));
+      const top = Math.max(8, Math.min(window.innerHeight - 190, rect.top));
+
+      return {
+        template,
+        top,
+        left,
+      };
+    });
+  };
+
+  const actionTemplate = actionMenu?.template ?? null;
+
   return (
     <div className="space-y-6">
       {successMessage && (
@@ -350,47 +400,46 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       )}
       <NextStepPanel onboarding={onboarding} onSelectTab={onSelectTab} />
       {error && (
-        <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg">
+        <div className="ds-alert ds-alert-error">
           Templates error: {error}
         </div>
       )}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <Card className="overflow-hidden">
+        <CardHeader className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-bold">Templates</h2>
           <div className="flex items-center gap-3">
             <div className="text-sm text-gray-500">
               MomentOS provides a curated set of templates.
             </div>
-            <button
+            <Button
               onClick={() => setShowCreateModal(true)}
-              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
               Create Template
-            </button>
+            </Button>
           </div>
-        </div>
+        </CardHeader>
 
         {loading ? (
-          <div className="p-6 text-center">Loading templates...</div>
+          <CardBody className="text-center">Loading templates...</CardBody>
         ) : templates.length === 0 ? (
-          <div className="p-6 text-center text-gray-600">No templates yet.</div>
+          <CardBody className="text-center text-gray-600">No templates yet.</CardBody>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[800px] w-full divide-y divide-gray-200">
+          <div className="ds-table-wrap">
+            <table className="min-w-[800px] w-full ds-table">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channels</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="ds-th">Name</th>
+                  <th className="ds-th">Type</th>
+                  <th className="ds-th">Subject</th>
+                  <th className="ds-th">Channels</th>
+                  <th className="ds-th">Default</th>
+                  <th className="ds-th">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {templates.map((template) => (
                   <tr key={template.id}>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">
+                    <td className="ds-td font-medium">
                       <span>{template.name}</span>
                       {/*
                       {template.isDefault && (
@@ -400,14 +449,14 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                       )}
                       */}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{template.type}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="ds-td text-gray-600">{template.type}</td>
+                    <td className="ds-td text-gray-600">
                       {template.subject}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="ds-td text-gray-600">
                       {(template.channels || ['email']).join(', ')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="ds-td">
                       <label className="inline-flex items-center gap-2">
                         <input
                           type="radio"
@@ -418,32 +467,30 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                         <span className="text-gray-600">Default</span>
                       </label>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <td className="ds-td">
+                      <div className="relative inline-block text-left" data-action-menu-root="true">
                         <button
-                          onClick={() => handlePreview(template.id)}
-                          className="text-blue-600 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleActionMenu(template, e.currentTarget);
+                          }}
+                          className={`ds-icon-trigger ${
+                            actionMenu && String(actionMenu.template?.id) === String(template.id)
+                              ? 'bg-gray-50 text-gray-700'
+                              : ''
+                          }`}
+                          aria-label="Open template actions"
                         >
-                          Preview
-                        </button>
-                        <button
-                          onClick={() => handleEdit(template)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleTest(template.id)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Test
-                        </button>
-                        <button
-                          onClick={() => handleDelete(template.id)}
-                          disabled={saving}
-                          className="text-red-600 hover:underline disabled:opacity-50"
-                        >
-                          Delete
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 16 16"
+                            fill="currentColor"
+                            aria-hidden="true"
+                          >
+                            <circle cx="3" cy="8" r="1.25" />
+                            <circle cx="8" cy="8" r="1.25" />
+                            <circle cx="13" cy="8" r="1.25" />
+                          </svg>
                         </button>
                       </div>
                     </td>
@@ -453,73 +500,125 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
             </table>
           </div>
         )}
-      </div>
+      </Card>
+      {actionMenu && actionTemplate && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="ds-dropdown"
+              style={{ top: actionMenu.top, left: actionMenu.left }}
+              onClick={(e) => e.stopPropagation()}
+              data-action-menu-root="true"
+            >
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handlePreview(actionTemplate.id);
+                }}
+                className="ds-dropdown-item"
+              >
+                Preview
+              </button>
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handleEdit(actionTemplate);
+                }}
+                className="ds-dropdown-item"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handleTest(actionTemplate.id);
+                }}
+                className="ds-dropdown-item"
+              >
+                Send Test
+              </button>
+              <button
+                onClick={() => {
+                  setActionMenu(null);
+                  handleDelete(actionTemplate.id);
+                }}
+                disabled={saving}
+                className="ds-dropdown-item text-red-600 hover:text-red-700"
+              >
+                Delete
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-50">
+        <div className="ds-modal-shell">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="ds-modal-backdrop"
             onClick={closeCreateModal}
           />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="ds-modal-position">
+            <div className="ds-modal-panel">
+              <div className="ds-modal-header">
                 <h3 className="text-lg font-bold">Create Template</h3>
-                <button
+                <Button
                   onClick={closeCreateModal}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  variant="ghost"
+                  size="sm"
                 >
                   Close
-                </button>
+                </Button>
               </div>
-              <div className="p-6">
+              <div className="ds-card-body">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Name</label>
-                    <input
+                    <label className="ds-label">Name</label>
+                    <Input
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Template name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Type</label>
-                    <select
+                    <label className="ds-label">Type</label>
+                    <Select
                       value={form.type}
                       onChange={(e) => setForm({ ...form, type: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="PLAIN_TEXT">Plain Text</option>
                       <option value="HTML">HTML</option>
                       <option value="CUSTOM_IMAGE">Custom Image</option>
-                    </select>
+                    </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Editor</label>
+                    <label className="ds-label">Editor</label>
                     <div className="flex items-center gap-3 text-sm">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setEditorMode('plain')}
-                        className={`px-3 py-2 rounded border ${
+                        variant="secondary"
+                        size="sm"
+                        className={`${
                           editorMode === 'plain'
                             ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600'
+                            : ''
                         }`}
                       >
                         Plain Text
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => setEditorMode('code')}
-                        className={`px-3 py-2 rounded border ${
+                        variant="secondary"
+                        size="sm"
+                        className={`${
                           editorMode === 'code'
                             ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600'
+                            : ''
                         }`}
                       >
                         Code
-                      </button>
+                      </Button>
                     </div>
                     {form.type === 'HTML' && editorMode === 'plain' && (
                       <p className="text-xs text-gray-500 mt-1">
@@ -528,31 +627,32 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     )}
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Subject</label>
-                    <input
+                    <label className="ds-label">Subject</label>
+                    <Input
                       value={form.subject}
                       onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Email subject"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">AI Draft (optional)</label>
+                    <label className="ds-label">AI Draft (optional)</label>
                     <textarea
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
-                      className="w-full h-24 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="ds-textarea h-24"
                       placeholder="Paste your message or notes. Example: Write a warm, faith-based birthday note for a church member."
                     />
                     <div className="mt-2 flex items-center gap-3">
-                      <button
+                      <Button
                         type="button"
                         onClick={handleGenerateDraft}
                         disabled={aiLoading}
-                        className="px-3 py-2 rounded border text-sm text-blue-700 border-blue-200 hover:bg-blue-50 disabled:opacity-60"
+                        variant="secondary"
+                        size="sm"
+                        className="text-blue-700"
                       >
                         {aiLoading ? 'Generating...' : 'Generate with AI'}
-                      </button>
+                      </Button>
                       <span className="text-xs text-gray-500">
                         Drafts a subject + message in plain text.
                       </span>
@@ -560,7 +660,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     {aiError && <p className="text-xs text-red-600 mt-2">{aiError}</p>}
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Delivery Channels</label>
+                    <label className="ds-label">Delivery Channels</label>
                     <div className="flex flex-wrap items-center gap-4 text-sm">
                       {channelOptions.map((channel) => (
                         <label key={channel} className="inline-flex items-center gap-2">
@@ -578,7 +678,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     </p>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Content</label>
+                    <label className="ds-label">Content</label>
                     <textarea
                       value={editorMode === 'plain' ? plainContent : form.content}
                       onChange={(e) =>
@@ -586,7 +686,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           ? setPlainContent(e.target.value)
                           : setForm({ ...form, content: e.target.value })
                       }
-                      className="w-full h-40 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      className="ds-textarea h-40 font-mono"
                       placeholder={
                         editorMode === 'plain'
                           ? 'Write a friendly message (no HTML needed)'
@@ -596,11 +696,10 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                   </div>
                   {form.type === 'CUSTOM_IMAGE' && (
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium mb-1">Image URL</label>
-                      <input
+                      <label className="ds-label">Image URL</label>
+                      <Input
                         value={form.imageUrl}
                         onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="https://example.com/image.png"
                       />
                     </div>
@@ -610,19 +709,18 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                 {error && <p className="mt-3 text-sm text-red-600">Template error: {error}</p>}
 
                 <div className="mt-4 flex justify-end gap-3">
-                  <button
+                  <Button
                     onClick={closeCreateModal}
-                    className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                    variant="secondary"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleCreate}
                     disabled={saving}
-                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Create Template'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -631,56 +729,54 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       )}
 
       {editingTemplate && (
-        <div className="fixed inset-0 z-50">
+        <div className="ds-modal-shell">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="ds-modal-backdrop"
             onClick={() => setEditingTemplate(null)}
           />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="ds-modal-position">
+            <div className="ds-modal-panel">
+              <div className="ds-modal-header">
                 <h3 className="text-lg font-bold">Edit Template</h3>
-                <button
+                <Button
                   onClick={() => setEditingTemplate(null)}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  variant="ghost"
+                  size="sm"
                 >
                   Close
-                </button>
+                </Button>
               </div>
-              <div className="p-6">
+              <div className="ds-card-body">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Name</label>
-                    <input
+                    <label className="ds-label">Name</label>
+                    <Input
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Template name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Type</label>
-                    <select
+                    <label className="ds-label">Type</label>
+                    <Select
                       value={form.type}
                       onChange={(e) => setForm({ ...form, type: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="PLAIN_TEXT">Plain Text</option>
                       <option value="HTML">HTML</option>
                       <option value="CUSTOM_IMAGE">Custom Image</option>
-                    </select>
+                    </Select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Subject</label>
-                    <input
+                    <label className="ds-label">Subject</label>
+                    <Input
                       value={form.subject}
                       onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Email subject"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Content</label>
+                    <label className="ds-label">Content</label>
                     <textarea
                       value={editorMode === 'plain' ? plainContent : form.content}
                       onChange={(e) =>
@@ -688,7 +784,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           ? setPlainContent(e.target.value)
                           : setForm({ ...form, content: e.target.value })
                       }
-                      className="w-full h-40 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      className="ds-textarea h-40 font-mono"
                       placeholder={
                         editorMode === 'plain'
                           ? 'Write a friendly message (no HTML needed)'
@@ -697,7 +793,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Delivery Channels</label>
+                    <label className="ds-label">Delivery Channels</label>
                     <div className="flex flex-wrap items-center gap-4 text-sm">
                       {channelOptions.map((channel) => (
                         <label key={channel} className="inline-flex items-center gap-2">
@@ -716,11 +812,10 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                   </div>
                   {form.type === 'CUSTOM_IMAGE' && (
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium mb-1">Image URL</label>
-                      <input
+                      <label className="ds-label">Image URL</label>
+                      <Input
                         value={form.imageUrl}
                         onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="https://example.com/image.png"
                       />
                     </div>
@@ -730,19 +825,18 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                 {error && <p className="mt-3 text-sm text-red-600">Template error: {error}</p>}
 
                 <div className="mt-4 flex justify-end gap-3">
-                  <button
+                  <Button
                     onClick={() => setEditingTemplate(null)}
-                    className="px-4 py-2 rounded text-sm text-gray-700 border hover:bg-gray-50"
+                    variant="secondary"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleUpdate}
                     disabled={saving}
-                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Update Template'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -751,63 +845,68 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       )}
 
       {preview && (
-        <div className="fixed inset-0 z-50">
+        <div className="ds-modal-shell">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="ds-modal-backdrop"
             onClick={() => setPreview(null)}
           />
           <div className="absolute inset-y-0 right-0 w-full max-w-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div className="ds-modal-header">
               <h3 className="text-lg font-bold">Template Preview</h3>
-              <button
+              <Button
                 onClick={() => setPreview(null)}
-                className="text-sm text-gray-600 hover:text-gray-900"
+                variant="ghost"
+                size="sm"
               >
                 Close
-              </button>
+              </Button>
             </div>
             <div className="px-6 pt-4">
-              <div className="inline-flex rounded border">
-                <button
+              <div className="inline-flex rounded-md border border-slate-200">
+                <Button
                   onClick={() => setPreviewMode('rendered')}
-                  className={`px-3 py-1 text-sm ${
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-none border-r border-slate-200 ${
                     previewMode === 'rendered'
                       ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                      : ''
                   }`}
                 >
                   Rendered
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => setPreviewMode('code')}
-                  className={`px-3 py-1 text-sm ${
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-none ${
                     previewMode === 'code'
                       ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                      : ''
                   }`}
                 >
                   Code
-                </button>
+                </Button>
               </div>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto h-full">
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase">Subject</p>
+                <p className="text-xs font-medium uppercase text-gray-500">Subject</p>
                 <p className="text-sm text-gray-800">{preview.subject}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase">Content</p>
+                <p className="text-xs font-medium uppercase text-gray-500">Content</p>
                 {previewMode === 'code' ? (
-                  <pre className="border rounded p-4 bg-gray-50 text-sm whitespace-pre-wrap">
+                  <pre className="rounded border border-slate-200 bg-gray-50 p-4 text-sm whitespace-pre-wrap">
                     {preview.content}
                   </pre>
                 ) : preview.type === 'HTML' ? (
                   <div
-                    className="border rounded p-4 bg-white"
+                    className="rounded border border-slate-200 bg-white p-4"
                     dangerouslySetInnerHTML={{ __html: preview.content }}
                   />
                 ) : (
-                  <div className="border rounded p-4 bg-gray-50 text-sm whitespace-pre-wrap">
+                  <div className="rounded border border-slate-200 bg-gray-50 p-4 text-sm whitespace-pre-wrap">
                     {preview.content}
                   </div>
                 )}
@@ -818,7 +917,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
       )}
 
       {testResult && (
-        <div className="bg-green-50 text-green-800 p-4 rounded-lg">
+        <div className="ds-alert ds-alert-success">
           {testResult}
         </div>
       )}

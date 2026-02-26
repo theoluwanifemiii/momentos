@@ -8,7 +8,7 @@ html {
 
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -309,6 +309,64 @@ body {
   .ui-dropdown-item:disabled {
     @apply cursor-not-allowed text-gray-300;
     background-color: var(--ds-color-surface);
+  }
+
+  .admin-panel {
+    @apply border bg-white;
+    border-color: var(--ds-color-border);
+    border-radius: var(--ds-radius-lg);
+    box-shadow: var(--ds-shadow-card);
+  }
+
+  .admin-nav-link {
+    @apply block rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors;
+  }
+
+  .admin-nav-link:hover {
+    background: var(--ds-color-surface-muted);
+    color: var(--ds-color-text);
+  }
+
+  .admin-nav-link-active {
+    background-color: var(--ds-color-brand);
+    color: #fff;
+  }
+
+  .admin-nav-link-active:hover {
+    background-color: var(--ds-color-brand-hover);
+    color: #fff;
+  }
+
+  .admin-toolbar {
+    @apply flex flex-wrap items-center gap-1.5;
+  }
+
+  .admin-table-row {
+    @apply transition-colors;
+  }
+
+  .admin-table-row:hover {
+    background: var(--ds-color-surface-muted);
+  }
+
+  .admin-status-pill {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .admin-status-pill-success {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .admin-status-pill-danger {
+    @apply bg-rose-50 text-rose-700;
+  }
+
+  .admin-status-pill-muted {
+    @apply bg-slate-100 text-slate-600;
+  }
+
+  .admin-status-pill-info {
+    @apply bg-blue-50 text-blue-700;
   }
 }
 

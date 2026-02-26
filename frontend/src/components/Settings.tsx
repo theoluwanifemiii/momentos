@@ -130,7 +130,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
       <Card>
         <CardBody className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold">Organization Settings</h2>
+          <h2 className="text-xl font-bold">Workspace Settings</h2>
           <p className="text-sm text-gray-600">
             Configure sender details, timezone, and daily send time.
           </p>
@@ -244,7 +244,7 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
               </Select>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Uses your organization timezone.
+              Uses your selected timezone.
             </p>
           </div>
         </div>

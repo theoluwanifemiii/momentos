@@ -2,6 +2,7 @@ import { Express, NextFunction, Response } from "express";
 import {
   DeliveryChannel,
   MomentCategory,
+  MomentOwnerType,
   MomentRecurrence,
   MomentStatus,
   UserRole,
@@ -29,10 +30,13 @@ const createMomentSchema = z.object({
   category: z.nativeEnum(MomentCategory),
   personIds: z.array(z.string().min(1)).min(1),
   eventDate: z.coerce.date(),
-  recurrenceRule: z.nativeEnum(MomentRecurrence).default("ANNUAL"),
+  recurrenceRule: z.nativeEnum(MomentRecurrence).default("MONTHLY"),
+  customIntervalDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+  randomizeMessage: z.boolean().default(false),
   deliveryChannels: z.array(z.nativeEnum(DeliveryChannel)).min(1).default(["email"]),
   templateId: z.string().min(1).nullable().optional(),
   status: z.nativeEnum(MomentStatus).default("ACTIVE"),
+  scope: z.enum(["BROADCAST", "PERSONAL"]).default("BROADCAST"),
 });
 
 const updateMomentSchema = z
@@ -42,6 +46,8 @@ const updateMomentSchema = z
     personIds: z.array(z.string().min(1)).min(1).optional(),
     eventDate: z.coerce.date().optional(),
     recurrenceRule: z.nativeEnum(MomentRecurrence).optional(),
+    customIntervalDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+    randomizeMessage: z.boolean().optional(),
     deliveryChannels: z.array(z.nativeEnum(DeliveryChannel)).min(1).optional(),
     templateId: z.string().min(1).nullable().optional(),
     status: z.nativeEnum(MomentStatus).optional(),
@@ -52,16 +58,35 @@ const updateMomentStatusSchema = z.object({
   status: z.nativeEnum(MomentStatus),
 });
 
+const createPersonalMomentSchema = z.object({
+  title: z.string().min(1).max(120),
+  category: z.nativeEnum(MomentCategory),
+  eventDate: z.coerce.date(),
+  recurrenceRule: z.nativeEnum(MomentRecurrence).default("MONTHLY"),
+  customIntervalDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+  randomizeMessage: z.boolean().default(false),
+  deliveryChannels: z.array(z.nativeEnum(DeliveryChannel)).min(1).default(["email"]),
+  templateId: z.string().min(1).nullable().optional(),
+  status: z.nativeEnum(MomentStatus).default("ACTIVE"),
+});
+
 const serializeMoment = (moment: any) => {
+  const recipientCount = (moment.recipients || []).length;
+  const scope =
+    moment.ownerType === "USER" && recipientCount === 1 ? "PERSONAL" : "BROADCAST";
+
   return {
     id: moment.id,
     title: moment.title,
     category: moment.category,
     eventDate: moment.eventDate,
     recurrenceRule: moment.recurrenceRule,
+    customIntervalDays: moment.customIntervalDays ?? null,
+    randomizeMessage: Boolean(moment.randomizeMessage),
     deliveryChannels: moment.deliveryChannels,
     status: moment.status,
     ownerType: moment.ownerType,
+    scope,
     ownerOrganizationId: moment.ownerOrganizationId,
     ownerUserId: moment.ownerUserId,
     template: moment.template
@@ -87,11 +112,29 @@ const serializeMoment = (moment: any) => {
 };
 
 const ensureSupportedRecurrence = (recurrenceRule: MomentRecurrence) => {
-  if (recurrenceRule === "CUSTOM") {
-    throw new Error(
-      "Invalid recurrence rule: custom recurrence is roadmap-only and not available yet."
-    );
+  const allowed = new Set<MomentRecurrence>([
+    "ONE_TIME",
+    "ANNUAL",
+    "DAILY",
+    "MONTHLY",
+    "QUARTERLY",
+    "BI_YEARLY",
+    "CUSTOM",
+  ]);
+  if (!allowed.has(recurrenceRule)) {
+    throw new Error("Invalid recurrence rule.");
   }
+};
+
+const resolveCustomInterval = (
+  recurrenceRule: MomentRecurrence,
+  customIntervalDays?: number | null
+) => {
+  if (recurrenceRule !== "CUSTOM") return null;
+  if (!customIntervalDays || customIntervalDays < 1) {
+    throw new Error("Custom recurrence requires a valid interval (in days).");
+  }
+  return customIntervalDays;
 };
 
 const normalizePersonIds = (ids: string[]) => Array.from(new Set(ids));
@@ -201,10 +244,23 @@ export function registerMomentsRoutes(app: Express) {
     try {
       const statusParam = req.query.status;
       const categoryParam = req.query.category;
+      const personIdParam =
+        typeof req.query.personId === "string" ? req.query.personId : undefined;
+      const scopeParamRaw =
+        typeof req.query.scope === "string" ? req.query.scope : "BROADCAST";
+      const scopeParam = z
+        .enum(["BROADCAST", "PERSONAL", "ALL"])
+        .parse(scopeParamRaw);
 
       const where: any = {
         ownerOrganizationId: req.organizationId!,
       };
+
+      if (scopeParam === "BROADCAST") {
+        where.ownerType = "ORGANIZATION";
+      } else if (scopeParam === "PERSONAL") {
+        where.ownerType = "USER";
+      }
 
       if (statusParam) {
         const parsedStatus = z.nativeEnum(MomentStatus).parse(statusParam);
@@ -214,6 +270,12 @@ export function registerMomentsRoutes(app: Express) {
       if (categoryParam) {
         const parsedCategory = z.nativeEnum(MomentCategory).parse(categoryParam);
         where.category = parsedCategory;
+      }
+
+      if (personIdParam) {
+        where.recipients = {
+          some: { personId: personIdParam },
+        };
       }
 
       const moments = await prisma.moment.findMany({
@@ -234,6 +296,94 @@ export function registerMomentsRoutes(app: Express) {
       res.status(400).json({ error: getUserErrorMessage(err) });
     }
   });
+
+  app.get(
+    "/api/moments/personal/:personId",
+    authenticate,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const [personId] = await assertPeopleBelongToOrganization(req.organizationId!, [
+          req.params.personId,
+        ]);
+
+        const moments = await prisma.moment.findMany({
+          where: {
+            ownerOrganizationId: req.organizationId!,
+            ownerType: "USER",
+            recipients: {
+              some: { personId },
+            },
+          },
+          include: {
+            template: true,
+            recipients: {
+              include: {
+                person: true,
+              },
+            },
+          },
+          orderBy: [{ eventDate: "asc" }, { createdAt: "desc" }],
+        });
+
+        res.json({ moments: moments.map(serializeMoment) });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
+      }
+    }
+  );
+
+  app.post(
+    "/api/moments/personal/:personId",
+    authenticate,
+    requireOrgAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const data = createPersonalMomentSchema.parse(req.body);
+        ensureSupportedRecurrence(data.recurrenceRule);
+        const customIntervalDays = resolveCustomInterval(
+          data.recurrenceRule,
+          data.customIntervalDays
+        );
+
+        const [personId] = await assertPeopleBelongToOrganization(req.organizationId!, [
+          req.params.personId,
+        ]);
+        await assertTemplateBelongsToOrganization(req.organizationId!, data.templateId);
+
+        const moment = await prisma.moment.create({
+          data: {
+            title: data.title.trim(),
+            category: data.category,
+            eventDate: data.eventDate,
+            recurrenceRule: data.recurrenceRule,
+            customIntervalDays,
+            randomizeMessage: data.randomizeMessage,
+            deliveryChannels: data.deliveryChannels,
+            templateId: data.templateId ?? null,
+            ownerType: "USER",
+            ownerOrganizationId: req.organizationId!,
+            ownerUserId: req.userId!,
+            status: data.status,
+            recipients: {
+              create: [{ personId }],
+            },
+          },
+          include: {
+            template: true,
+            recipients: {
+              include: {
+                person: true,
+              },
+            },
+          },
+        });
+
+        res.status(201).json({ moment: serializeMoment(moment) });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
+      }
+    }
+  );
 
   app.get(
     "/api/moments/:id",
@@ -274,15 +424,27 @@ export function registerMomentsRoutes(app: Express) {
       try {
         const data = createMomentSchema.parse(req.body);
         ensureSupportedRecurrence(data.recurrenceRule);
+        const customIntervalDays = resolveCustomInterval(
+          data.recurrenceRule,
+          data.customIntervalDays
+        );
 
         const personIds = await assertPeopleBelongToOrganization(
           req.organizationId!,
           data.personIds
         );
+        if (data.scope === "PERSONAL" && personIds.length !== 1) {
+          return res.status(400).json({
+            error: "Personal moments must target exactly one person.",
+          });
+        }
         await assertTemplateBelongsToOrganization(
           req.organizationId!,
           data.templateId
         );
+
+        const ownerType: MomentOwnerType =
+          data.scope === "PERSONAL" ? "USER" : "ORGANIZATION";
 
         const moment = await prisma.moment.create({
           data: {
@@ -290,9 +452,11 @@ export function registerMomentsRoutes(app: Express) {
             category: data.category,
             eventDate: data.eventDate,
             recurrenceRule: data.recurrenceRule,
+            customIntervalDays,
+            randomizeMessage: data.randomizeMessage,
             deliveryChannels: data.deliveryChannels,
             templateId: data.templateId ?? null,
-            ownerType: "ORGANIZATION",
+            ownerType,
             ownerOrganizationId: req.organizationId!,
             ownerUserId: req.userId!,
             status: data.status,
@@ -333,7 +497,12 @@ export function registerMomentsRoutes(app: Express) {
             id: req.params.id,
             ownerOrganizationId: req.organizationId!,
           },
-          select: { id: true },
+          select: {
+            id: true,
+            ownerType: true,
+            recurrenceRule: true,
+            customIntervalDays: true,
+          },
         });
 
         if (!existing) {
@@ -346,6 +515,11 @@ export function registerMomentsRoutes(app: Express) {
             req.organizationId!,
             data.personIds
           );
+          if (existing.ownerType === "USER" && nextPersonIds.length !== 1) {
+            return res.status(400).json({
+              error: "Personal moments must target exactly one person.",
+            });
+          }
         }
 
         if (data.templateId !== undefined) {
@@ -354,6 +528,16 @@ export function registerMomentsRoutes(app: Express) {
             data.templateId
           );
         }
+
+        const nextRecurrenceRule = data.recurrenceRule ?? existing.recurrenceRule;
+        const nextCustomInterval =
+          data.customIntervalDays !== undefined
+            ? data.customIntervalDays
+            : existing.customIntervalDays;
+        const normalizedCustomInterval = resolveCustomInterval(
+          nextRecurrenceRule,
+          nextCustomInterval
+        );
 
         await prisma.$transaction(async (tx) => {
           await tx.moment.update({
@@ -364,6 +548,13 @@ export function registerMomentsRoutes(app: Express) {
               ...(data.eventDate !== undefined ? { eventDate: data.eventDate } : {}),
               ...(data.recurrenceRule !== undefined
                 ? { recurrenceRule: data.recurrenceRule }
+                : {}),
+              ...(data.recurrenceRule !== undefined ||
+              data.customIntervalDays !== undefined
+                ? { customIntervalDays: normalizedCustomInterval }
+                : {}),
+              ...(data.randomizeMessage !== undefined
+                ? { randomizeMessage: data.randomizeMessage }
                 : {}),
               ...(data.deliveryChannels !== undefined
                 ? { deliveryChannels: data.deliveryChannels }

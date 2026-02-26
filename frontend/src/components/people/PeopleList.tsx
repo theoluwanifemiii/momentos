@@ -5,6 +5,7 @@ import { OnboardingState } from '../../types/onboarding';
 import NextStepPanel from '../onboarding/NextStepPanel';
 import OnboardingBanner from '../onboarding/OnboardingBanner';
 import { Button, Card, CardBody, CardHeader } from '../ui';
+import PersonProfileModal from './PersonProfileModal';
 
 // People: list records, manual add, and send birthday email now.
 type PeopleListProps = {
@@ -55,6 +56,7 @@ export default function PeopleList({
     role: '',
   });
   const [editFormError, setEditFormError] = useState('');
+  const [profilePerson, setProfilePerson] = useState<any | null>(null);
 
   useEffect(() => {
     loadPeople();
@@ -526,7 +528,7 @@ export default function PeopleList({
         </CardHeader>
       <CardBody className="p-0">
       <div className="ds-table-wrap">
-        <table className="min-w-[900px] w-full ds-table">
+        <table className="min-w-[980px] w-full ds-table">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -541,17 +543,23 @@ export default function PeopleList({
               <th className="ds-th">Phone</th>
               <th className="ds-th">Birthday</th>
               <th className="ds-th">Department</th>
+              <th className="ds-th">Role</th>
               <th className="ds-th">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {people.map((person) => (
-              <tr key={person.id}>
+              <tr
+                key={person.id}
+                className="cursor-pointer transition-colors hover:bg-slate-50"
+                onClick={() => setProfilePerson(person)}
+              >
                 <td className="px-4 py-4 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(person.id)}
                     onChange={() => toggleSelect(person.id)}
+                    onClick={(event) => event.stopPropagation()}
                   />
                 </td>
                 <td className="ds-td">{person.fullName}</td>
@@ -566,8 +574,25 @@ export default function PeopleList({
                   {person.department || '—'}
                 </td>
                 <td className="ds-td">
+                  {person.role ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setProfilePerson(person);
+                      }}
+                      className="ds-link text-sm"
+                    >
+                      {person.role}
+                    </button>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="ds-td">
                   <div className="relative inline-block text-left" data-action-menu-root="true">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleActionMenu(person, e.currentTarget);
@@ -862,6 +887,13 @@ export default function PeopleList({
           </div>
         </div>
       )}
+      {profilePerson ? (
+        <PersonProfileModal
+          api={api}
+          person={profilePerson}
+          onClose={() => setProfilePerson(null)}
+        />
+      ) : null}
       </Card>
     </div>
   );

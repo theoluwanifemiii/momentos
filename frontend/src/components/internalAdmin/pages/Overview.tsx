@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "../../../api";
+import { Card, CardBody } from "../../ui";
 import AdminPage from "../ui/AdminPage";
 
 type OverviewStats = {
@@ -52,17 +53,14 @@ export default function AdminOverview() {
             { label: "Failed Deliveries Today", value: stats.failedDeliveriesToday },
             { label: "Upcoming Birthdays (7d)", value: stats.upcomingBirthdays },
           ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-slate-200 bg-white p-4"
-            >
-              <div className="text-xs uppercase tracking-wider text-slate-400">
-                {item.label}
-              </div>
-              <div className="text-2xl font-semibold text-slate-900 mt-2">
-                {item.value}
-              </div>
-            </div>
+            <Card key={item.label}>
+              <CardBody className="space-y-2 p-5">
+                <div className="text-xs uppercase tracking-wider text-slate-400">
+                  {item.label}
+                </div>
+                <div className="text-2xl font-semibold text-slate-900">{item.value}</div>
+              </CardBody>
+            </Card>
           ))}
         </div>
       ) : null}

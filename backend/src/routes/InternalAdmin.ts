@@ -1,6 +1,6 @@
 import { Express, Request, Response } from "express";
 import { z } from "zod";
-import { Prisma, DeliveryStatus } from "@prisma/client";
+import { Prisma, DeliveryStatus, FeedbackType } from "@prisma/client";
 import { EmailService } from "../services/emailService";
 import {
   ADMIN_INVITE_FROM_EMAIL,
@@ -893,6 +893,89 @@ app.get(
       });
     } catch (err: any) {
       res.status(500).json({ error: getUserErrorMessage(err, "Audit fetch failed") });
+    }
+  }
+);
+
+app.get(
+  "/api/internal/admin/feedback",
+  authenticateAdmin,
+  adminCache(10),
+  async (req: AdminAuthRequest, res: Response) => {
+    try {
+      const { page = "1", limit = "50", type, orgId, search } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.min(200, parseInt(limit as string, 10) || 50);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: Prisma.FeedbackEntryWhereInput = {};
+      if (type) {
+        const parsedType = z.nativeEnum(FeedbackType).parse(String(type));
+        where.type = parsedType;
+      }
+      if (orgId) {
+        where.organizationId = String(orgId);
+      }
+      if (search) {
+        const value = String(search);
+        where.OR = [
+          { subject: { contains: value, mode: "insensitive" } },
+          { message: { contains: value, mode: "insensitive" } },
+          {
+            user: {
+              is: {
+                email: { contains: value, mode: "insensitive" },
+              },
+            },
+          },
+          {
+            organization: {
+              is: {
+                name: { contains: value, mode: "insensitive" },
+              },
+            },
+          },
+        ];
+      }
+
+      const [entries, total] = await Promise.all([
+        prisma.feedbackEntry.findMany({
+          where,
+          include: {
+            organization: {
+              select: { id: true, name: true },
+            },
+            user: {
+              select: { id: true, email: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limitNum,
+        }),
+        prisma.feedbackEntry.count({ where }),
+      ]);
+
+      res.json({
+        feedback: entries.map((entry) => ({
+          id: entry.id,
+          type: entry.type,
+          subject: entry.subject,
+          message: entry.message,
+          pagePath: entry.pagePath,
+          createdAt: entry.createdAt,
+          organization: entry.organization,
+          user: entry.user,
+        })),
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: getUserErrorMessage(err, "Feedback fetch failed") });
     }
   }
 );
