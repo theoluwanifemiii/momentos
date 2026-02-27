@@ -3,10 +3,11 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z, ZodError } from "zod";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { EmailService } from "../services/emailService";
 import { createRateLimiter } from "../middleware/security";
 import {
+  authMagicLinkTemplate,
   resetPasswordLinkTemplate,
   verifyEmailLinkTemplate,
   waitlistWelcomeTemplate,
@@ -50,6 +51,9 @@ const buildAppUrl = (path: string) => {
 
 const PASSWORD_RESET_LINK_TTL_MINUTES = Number(
   process.env.PASSWORD_RESET_LINK_TTL_MINUTES || 30
+);
+const MAGIC_AUTH_LINK_TTL_MINUTES = Number(
+  process.env.MAGIC_AUTH_LINK_TTL_MINUTES || 20
 );
 
 const derivePersonalWorkspaceName = (email: string) => {
@@ -181,6 +185,73 @@ const sendPasswordResetLink = async (params: {
   });
 };
 
+const sendAuthMagicLink = async (params: {
+  user: { id: string; email: string };
+  mode: "LOGIN" | "REGISTER";
+}) => {
+  const token = jwt.sign(
+    {
+      userId: params.user.id,
+      email: params.user.email,
+      purpose: "AUTH_MAGIC_LINK",
+      mode: params.mode,
+    },
+    JWT_SECRET,
+    { expiresIn: `${MAGIC_AUTH_LINK_TTL_MINUTES}m` }
+  );
+
+  const authUrl = `${buildAppUrl("/app")}?token=${encodeURIComponent(token)}`;
+  const fromEmail = resolveFromEmail(DEFAULT_FROM_EMAIL);
+  const fromName = DEFAULT_FROM_NAME || "MomentOS";
+
+  if (!fromEmail) {
+    throw new Error("DEFAULT_FROM_EMAIL is not configured");
+  }
+
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + MAGIC_AUTH_LINK_TTL_MINUTES * 60 * 1000);
+  const now = new Date();
+
+  // Keep only the latest unconsumed auth link per user/email.
+  await prisma.otp.updateMany({
+    where: {
+      email: params.user.email,
+      userId: params.user.id,
+      purpose: OtpPurpose.PASSWORD_RESET,
+      consumedAt: null,
+    },
+    data: { consumedAt: now },
+  });
+
+  await prisma.otp.create({
+    data: {
+      email: params.user.email,
+      userId: params.user.id,
+      purpose: OtpPurpose.PASSWORD_RESET,
+      codeHash: tokenHash,
+      expiresAt,
+      maxAttempts: 1,
+    },
+  });
+
+  const { subject, text, html } = authMagicLinkTemplate({
+    authUrl,
+    ttlMinutes: MAGIC_AUTH_LINK_TTL_MINUTES,
+    mode: params.mode,
+  });
+
+  await EmailService.send({
+    to: params.user.email,
+    subject,
+    text,
+    html,
+    from: {
+      name: fromName,
+      email: fromEmail,
+    },
+  });
+};
+
 const authLoginRateLimit = createRateLimiter({
   keyPrefix: "auth-login",
   windowMs: 10 * 60 * 1000,
@@ -209,6 +280,18 @@ const authResetPasswordRateLimit = createRateLimiter({
   keyPrefix: "auth-reset",
   windowMs: 10 * 60 * 1000,
   max: 10,
+});
+
+const authMagicRequestRateLimit = createRateLimiter({
+  keyPrefix: "auth-magic-request",
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+});
+
+const authMagicVerifyRateLimit = createRateLimiter({
+  keyPrefix: "auth-magic-verify",
+  windowMs: 10 * 60 * 1000,
+  max: 12,
 });
 
 const adminAuthRateLimit = createRateLimiter({
@@ -476,6 +559,336 @@ export function registerAuthRoutes(app: Express) {
         admin: payload,
         csrfToken: req.cookies?.[ADMIN_CSRF_COOKIE] || null,
       });
+    }
+  );
+
+  app.post(
+    "/api/auth/magic/request",
+    authMagicRequestRateLimit,
+    async (req: Request, res: Response) => {
+      let parsedInput:
+        | {
+            email: string;
+            mode: "LOGIN" | "REGISTER";
+            accountType?: "ORGANIZATION" | "INDIVIDUAL";
+            organizationName?: string;
+            timezone?: string;
+          }
+        | undefined;
+      try {
+        const schema = z.object({
+          email: z.string().trim().email(),
+          mode: z.enum(["LOGIN", "REGISTER"]).default("LOGIN"),
+          accountType: z.enum(["ORGANIZATION", "INDIVIDUAL"]).optional(),
+          organizationName: z.string().trim().optional(),
+          timezone: z.string().default("UTC").optional(),
+        });
+
+        const data = schema.parse(req.body);
+        parsedInput = data;
+        const normalizedEmail = data.email.toLowerCase();
+
+        if (data.mode === "LOGIN") {
+          const user = await prisma.user.findUnique({
+            where: { email: normalizedEmail },
+          });
+
+          if (user && !user.isDisabled) {
+            await sendAuthMagicLink({
+              user: { id: user.id, email: user.email },
+              mode: "LOGIN",
+            });
+          }
+
+          return res.json({
+            success: true,
+            message: "If the account exists, a sign-in link was sent.",
+          });
+        }
+
+        const existing = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+        });
+        if (existing) {
+          if (existing.isDisabled) {
+            return res.status(403).json({ error: "User account disabled" });
+          }
+
+          await sendAuthMagicLink({
+            user: { id: existing.id, email: existing.email },
+            mode: existing.emailVerifiedAt ? "LOGIN" : "REGISTER",
+          });
+
+          return res.json({
+            success: true,
+            message: "Account already exists. A sign-in link was sent.",
+          });
+        }
+
+        const accountType = data.accountType || "INDIVIDUAL";
+        const submittedOrganizationName = data.organizationName?.trim() || "";
+
+        if (accountType === "ORGANIZATION" && !submittedOrganizationName) {
+          return res
+            .status(400)
+            .json({ error: "Organization name is required for organization accounts." });
+        }
+
+        const resolvedOrganizationName =
+          submittedOrganizationName || derivePersonalWorkspaceName(normalizedEmail);
+        const generatedPassword = randomBytes(24).toString("hex");
+        const passwordHash = await bcrypt.hash(generatedPassword, 10);
+
+        const org = await prisma.organization.create({
+          data: {
+            name: resolvedOrganizationName,
+            timezone: data.timezone || "UTC",
+            users: {
+              create: {
+                email: normalizedEmail,
+                passwordHash,
+                role: "ADMIN",
+              },
+            },
+          },
+          include: {
+            users: true,
+          },
+        });
+
+        const user = org.users[0];
+        await sendAuthMagicLink({
+          user: { id: user.id, email: user.email },
+          mode: "REGISTER",
+        });
+
+        return res.json({
+          success: true,
+          message: "Sign-up link sent. Check your email to continue.",
+        });
+      } catch (err: any) {
+        const safeEmail = parsedInput?.email?.toLowerCase?.() || "";
+        console.error("Magic link request failed:", {
+          mode: parsedInput?.mode,
+          email: safeEmail || undefined,
+          error:
+            err?.message ||
+            err?.code ||
+            (typeof err === "string" ? err : "unknown"),
+        });
+
+        if (err instanceof ZodError) {
+          return res.status(400).json({
+            error: getUserErrorMessage(err, "Invalid sign-in request."),
+          });
+        }
+
+        const rawMessage = `${err?.message || ""}`.toLowerCase();
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
+        ) {
+          return res.status(409).json({
+            error: "Email already registered. Use sign in instead.",
+          });
+        }
+
+        if (
+          rawMessage.includes("resend") ||
+          rawMessage.includes("email_service_error") ||
+          rawMessage.includes("sender") ||
+          rawMessage.includes("from address") ||
+          rawMessage.includes("from email") ||
+          rawMessage.includes("domain not verified") ||
+          rawMessage.includes("forbidden") ||
+          rawMessage.includes("unauthorized") ||
+          rawMessage.includes("api_key") ||
+          rawMessage.includes("api key")
+        ) {
+          return res.status(503).json({
+            error:
+              "We couldn't send your sign-in email right now. Please try again shortly.",
+          });
+        }
+
+        if (
+          rawMessage.includes("prisma") ||
+          rawMessage.includes("database") ||
+          rawMessage.includes("p1001") ||
+          rawMessage.includes("can't reach database")
+        ) {
+          return res.status(503).json({
+            error: "Authentication is temporarily unavailable. Please try again shortly.",
+          });
+        }
+
+        return res.status(500).json({
+          error:
+            "We couldn't process your sign-in link request right now. Please try again shortly.",
+        });
+      }
+    }
+  );
+
+  app.post(
+    "/api/auth/magic/verify",
+    authMagicVerifyRateLimit,
+    async (req: Request, res: Response) => {
+      try {
+        const schema = z.object({
+          token: z.string().min(20),
+        });
+
+        const { token } = schema.parse(req.body);
+        let payload: {
+          userId: string;
+          email: string;
+          purpose?: string;
+          mode?: "LOGIN" | "REGISTER";
+        };
+        try {
+          payload = jwt.verify(token, JWT_SECRET) as {
+            userId: string;
+            email: string;
+            purpose?: string;
+            mode?: "LOGIN" | "REGISTER";
+          };
+        } catch {
+          return res
+            .status(400)
+            .json({ error: "Magic link is invalid or expired." });
+        }
+
+        if (payload.purpose !== "AUTH_MAGIC_LINK") {
+          return res.status(400).json({ error: "Magic link is invalid." });
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: payload.userId },
+          include: { organization: true },
+        });
+
+        if (!user) {
+          return res.status(400).json({ error: "Magic link is invalid." });
+        }
+
+        if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
+          return res.status(400).json({ error: "Magic link is invalid." });
+        }
+
+        if (user.isDisabled) {
+          return res.status(403).json({ error: "User account disabled" });
+        }
+
+        const tokenHash = hashToken(token);
+        const magicLinkRecord = await prisma.otp.findFirst({
+          where: {
+            email: user.email,
+            userId: user.id,
+            purpose: OtpPurpose.PASSWORD_RESET,
+            codeHash: tokenHash,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (!magicLinkRecord) {
+          return res
+            .status(400)
+            .json({ error: "Magic link is invalid or expired." });
+        }
+
+        const consumeResult = await prisma.otp.updateMany({
+          where: { id: magicLinkRecord.id, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+
+        if (consumeResult.count === 0) {
+          return res
+            .status(400)
+            .json({ error: "Magic link is invalid or expired." });
+        }
+
+        const firstVerifiedLogin = !user.emailVerifiedAt;
+        if (firstVerifiedLogin) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { emailVerifiedAt: new Date() },
+          });
+        }
+
+        if (!user.organization) {
+          return res
+            .status(400)
+            .json({ error: "Organization not found for this account." });
+        }
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        });
+
+        if (firstVerifiedLogin) {
+          const welcomeFromEmail = resolveFromEmail(
+            user.organization.emailFromAddress || WELCOME_FROM_EMAIL
+          );
+
+          if (welcomeFromEmail) {
+            const recipientName = user.email.split("@")[0];
+            const { subject, html, text } = welcomeTemplate({
+              organizationName: user.organization.name || "MomentOS",
+              recipientName,
+            });
+
+            void EmailService.send({
+              to: user.email,
+              subject,
+              html,
+              text,
+              from: {
+                name: WELCOME_FROM_NAME,
+                email: welcomeFromEmail,
+              },
+              replyTo: WELCOME_REPLY_TO,
+            }).catch((error: any) => {
+              console.error("Welcome email send failed on magic auth verify:", {
+                userId: user.id,
+                email: user.email,
+                error: error?.message || error,
+              });
+            });
+          }
+        }
+
+        const sessionToken = jwt.sign(
+          {
+            userId: user.id,
+            organizationId: user.organizationId,
+            userRole: user.role,
+          },
+          JWT_SECRET,
+          { expiresIn: "7d" }
+        );
+
+        return res.json({
+          token: sessionToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+          },
+          organization: {
+            id: user.organization.id,
+            name: user.organization.name,
+            timezone: user.organization.timezone,
+          },
+        });
+      } catch (err: any) {
+        res
+          .status(400)
+          .json({ error: getUserErrorMessage(err, "Magic link verification failed") });
+      }
     }
   );
 

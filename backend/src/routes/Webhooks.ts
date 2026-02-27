@@ -21,6 +21,11 @@ const mapProviderStatus = (rawStatus: string) => {
     return null;
   }
 
+  const sentTokens = ["sent", "accepted", "queued", "pending", "submitted"];
+  if (sentTokens.some((token) => value.includes(token))) {
+    return DeliveryStatus.SENT;
+  }
+
   const deliveredTokens = ["delivered", "deliver"];
   if (deliveredTokens.some((token) => value.includes(token))) {
     return DeliveryStatus.DELIVERED;
@@ -40,6 +45,41 @@ const mapProviderStatus = (rawStatus: string) => {
   }
 
   return null;
+};
+
+const parseWebhookPayload = (body: unknown): Record<string, unknown> => {
+  if (body && typeof body === "object") {
+    return body as Record<string, unknown>;
+  }
+
+  if (typeof body !== "string") {
+    return {};
+  }
+
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Fallback to URL-encoded parsing below.
+  }
+
+  const params = new URLSearchParams(trimmed);
+  if ([...params.keys()].length === 0) {
+    return {};
+  }
+
+  const payload: Record<string, unknown> = {};
+  params.forEach((value, key) => {
+    payload[key] = value;
+  });
+  return payload;
 };
 
 export function registerWebhookRoutes(app: Express) {
@@ -66,10 +106,7 @@ export function registerWebhookRoutes(app: Express) {
         }
       }
 
-      const payload =
-        req.body && typeof req.body === "object"
-          ? (req.body as Record<string, unknown>)
-          : {};
+      const payload = parseWebhookPayload(req.body);
 
       const externalId = pickFirstString(payload, [
         "message_id",
@@ -89,6 +126,11 @@ export function registerWebhookRoutes(app: Express) {
       ]);
       const mappedStatus = mapProviderStatus(providerStatus);
       if (!mappedStatus) {
+        console.warn("Termii SMS webhook ignored unknown status:", {
+          externalId,
+          providerStatus,
+          payload,
+        });
         return res.status(202).json({ ignored: true, reason: "Unknown status" });
       }
 
@@ -109,10 +151,17 @@ export function registerWebhookRoutes(app: Express) {
       });
 
       if (!log) {
+        console.warn("Termii SMS webhook delivery log not found:", {
+          externalId,
+          providerStatus,
+        });
         return res.status(202).json({ ignored: true, reason: "Delivery log not found" });
       }
 
-      if (log.status === DeliveryStatus.DELIVERED && mappedStatus === DeliveryStatus.FAILED) {
+      if (
+        log.status === DeliveryStatus.DELIVERED &&
+        (mappedStatus === DeliveryStatus.FAILED || mappedStatus === DeliveryStatus.SENT)
+      ) {
         return res.status(200).json({ ok: true, ignored: true, reason: "Already delivered" });
       }
 
@@ -121,12 +170,17 @@ export function registerWebhookRoutes(app: Express) {
         where: { id: log.id },
         data: {
           status: mappedStatus,
-          sentAt: log.sentAt || now,
-          deliveredAt: mappedStatus === DeliveryStatus.DELIVERED ? now : null,
+          sentAt:
+            mappedStatus === DeliveryStatus.SENT ||
+            mappedStatus === DeliveryStatus.DELIVERED
+              ? log.sentAt || now
+              : log.sentAt,
+          deliveredAt:
+            mappedStatus === DeliveryStatus.DELIVERED ? now : log.deliveredAt,
           errorMessage:
             mappedStatus === DeliveryStatus.FAILED
               ? failureReason || `Provider status: ${providerStatus || "failed"}`
-              : null,
+              : log.errorMessage,
         },
       });
 

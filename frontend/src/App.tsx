@@ -1,6 +1,6 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { api } from './api';
 
@@ -10,8 +10,6 @@ const Dashboard = lazy(() => import('./components/Dashboard.tsx'));
 const LoginForm = lazy(() => import('./components/auth/LoginForm.tsx'));
 const RegisterForm = lazy(() => import('./components/auth/RegisterForm.tsx'));
 const VerifyForm = lazy(() => import('./components/auth/VerifyForm.tsx'));
-const ForgotPasswordForm = lazy(() => import('./components/auth/ForgotPasswordForm.tsx'));
-const ResetPasswordForm = lazy(() => import('./components/auth/ResetPasswordForm.tsx'));
 const AdminLogin = lazy(() => import('./components/internalAdmin/AdminLogin.tsx'));
 const AdminRegister = lazy(() => import('./components/internalAdmin/AdminRegister.tsx'));
 const AdminLayout = lazy(() => import('./components/internalAdmin/AdminLayout.tsx'));
@@ -56,6 +54,101 @@ export default function MomentOSApp() {
     </main>
   );
 
+  const LoginGate = () => {
+    const [searchParams] = useSearchParams();
+    const tokenFromQuery = searchParams.get('token')?.trim() || '';
+    const tokenFromHash = useMemo(() => {
+      const hash = window.location.hash.replace(/^#/, '');
+      return new URLSearchParams(hash).get('token')?.trim() || '';
+    }, []);
+    const token = tokenFromQuery || tokenFromHash;
+
+    if (token) {
+      return <Navigate to={`/app?token=${encodeURIComponent(token)}`} replace />;
+    }
+
+    return (
+      <AuthLayout>
+        <LoginForm
+          onSuccess={(data) => {
+            localStorage.setItem('token', data.token);
+            setUser(data.user);
+            setIsAuthenticated(true);
+            navigate('/app');
+          }}
+          onSwitchToRegister={() => navigate('/register')}
+          defaultEmail={pendingEmail}
+        />
+      </AuthLayout>
+    );
+  };
+
+  const AppGate = () => {
+    const [searchParams] = useSearchParams();
+    const tokenFromQuery = searchParams.get('token')?.trim() || '';
+    const tokenFromHash = useMemo(() => {
+      const hash = window.location.hash.replace(/^#/, '');
+      return new URLSearchParams(hash).get('token')?.trim() || '';
+    }, []);
+    const token = tokenFromQuery || tokenFromHash;
+    const [verifying, setVerifying] = useState(Boolean(token));
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+      if (!token || isAuthenticated) return;
+      let isMounted = true;
+      setVerifying(true);
+      setError('');
+
+      api
+        .call('/auth/magic/verify', {
+          method: 'POST',
+          body: JSON.stringify({ token }),
+        })
+        .then((data) => {
+          if (!isMounted) return;
+          localStorage.setItem('token', data.token);
+          setUser(data.user);
+          setIsAuthenticated(true);
+          navigate('/app', { replace: true });
+        })
+        .catch((err: any) => {
+          if (!isMounted) return;
+          setError(`Magic link sign-in failed: ${err.message}`);
+        })
+        .finally(() => {
+          if (!isMounted) return;
+          setVerifying(false);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }, [token, isAuthenticated]);
+
+    if (isAuthenticated) {
+      return <Dashboard user={user} onLogout={handleLogout} api={api} />;
+    }
+
+    if (token) {
+      return (
+        <AuthLayout>
+          <div className="ds-surface p-6 text-center space-y-4">
+            <h1 className="text-lg font-semibold text-slate-900">Signing you in</h1>
+            {verifying ? (
+              <p className="text-sm text-slate-600">Verifying your sign-in link...</p>
+            ) : (
+              <p className="text-sm text-slate-600">Sign-in could not be completed.</p>
+            )}
+            {error ? <p className="ds-alert ds-alert-error">{error}</p> : null}
+          </div>
+        </AuthLayout>
+      );
+    }
+
+    return <Navigate to="/login" replace />;
+  };
+
   return (
     <>
       <Suspense fallback={<div className="text-center py-8">Loading...</div>}>
@@ -76,22 +169,7 @@ export default function MomentOSApp() {
               isAuthenticated ? (
                 <Navigate to="/app" replace />
               ) : (
-                <AuthLayout>
-                  <LoginForm
-                    onSuccess={(data) => {
-                      localStorage.setItem('token', data.token);
-                      setUser(data.user);
-                      setIsAuthenticated(true);
-                      navigate('/app');
-                    }}
-                    onRequireVerification={(email: string) => {
-                      setPendingEmail(email);
-                      navigate('/verify');
-                    }}
-                    onSwitchToRegister={() => navigate('/register')}
-                    onForgotPassword={() => navigate('/forgot')}
-                  />
-                </AuthLayout>
+                <LoginGate />
               )
             }
           />
@@ -103,18 +181,12 @@ export default function MomentOSApp() {
               ) : (
                 <AuthLayout>
                   <RegisterForm
-                    onSuccess={(data, email: string) => {
-                      if (data.requiresVerification) {
-                        setPendingEmail(email);
-                        navigate('/verify');
-                        return;
-                      }
-                      localStorage.setItem('token', data.token);
-                      setUser(data.user);
-                      setIsAuthenticated(true);
-                      navigate('/app');
+                    onMagicLinkSent={(email: string) => {
+                      setPendingEmail(email);
                     }}
-                    onSwitchToLogin={() => navigate('/login')}
+                    onSwitchToLogin={() => {
+                      navigate('/login');
+                    }}
                   />
                 </AuthLayout>
               )
@@ -139,41 +211,18 @@ export default function MomentOSApp() {
           <Route
             path="/forgot"
             element={
-              isAuthenticated ? (
-                <Navigate to="/app" replace />
-              ) : (
-                <AuthLayout>
-                  <ForgotPasswordForm
-                    onBackToLogin={() => navigate('/login')}
-                  />
-                </AuthLayout>
-              )
+              <Navigate to="/login" replace />
             }
           />
           <Route
             path="/reset"
             element={
-              isAuthenticated ? (
-                <Navigate to="/app" replace />
-              ) : (
-                <AuthLayout>
-                  <ResetPasswordForm
-                    onSuccess={() => navigate('/login')}
-                    onBackToLogin={() => navigate('/login')}
-                  />
-                </AuthLayout>
-              )
+              <Navigate to="/login" replace />
             }
           />
           <Route
             path="/app"
-            element={
-              isAuthenticated ? (
-                <Dashboard user={user} onLogout={handleLogout} api={api} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
+            element={<AppGate />}
           />
           <Route
             path="/admin/login"

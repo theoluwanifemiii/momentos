@@ -4,21 +4,20 @@ import { Button, Input, Select } from '../ui';
 import AuthContainer from './AuthContainer';
 
 type RegisterFormProps = {
-  onSuccess: (data: any, email: string) => void;
   onSwitchToLogin: () => void;
+  onMagicLinkSent: (email: string) => void;
 };
 
 type AccountType = 'INDIVIDUAL' | 'ORGANIZATION';
 
-// Auth: register individual or organization workspace, then route to verification.
-export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) {
+// Auth: request passwordless signup magic link.
+export default function RegisterForm({ onSwitchToLogin, onMagicLinkSent }: RegisterFormProps) {
   const [accountType, setAccountType] = useState<AccountType>('INDIVIDUAL');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [organizationName, setOrganizationName] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const filledFieldClass = 'bg-slate-50 border-slate-200 focus:bg-white';
 
@@ -27,27 +26,25 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
       setError('Organization or group name is required');
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
 
     setError('');
+    setMessage('');
     setLoading(true);
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      const data = await api.call('/auth/register', {
+      const data = await api.call('/auth/magic/request', {
         method: 'POST',
         body: JSON.stringify({
+          mode: 'REGISTER',
           accountType,
           email: normalizedEmail,
-          password,
           organizationName: organizationName.trim() || undefined,
           timezone,
         }),
       });
-      onSuccess(data, normalizedEmail);
+      onMagicLinkSent(normalizedEmail);
+      setMessage(data?.message || 'Check your email for a sign-up link to complete registration.');
     } catch (err: any) {
       setError(`Registration failed: ${err.message}`);
     } finally {
@@ -114,55 +111,6 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
         />
       </div>
       <div>
-        <label className="ds-label">Password (min 8 characters)</label>
-        <div className="relative">
-          <Input
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={`pr-20 ${filledFieldClass}`}
-            placeholder="••••••••"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((value) => !value)}
-            className="absolute inset-y-0 right-2 flex items-center text-slate-500 hover:text-slate-700"
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-          >
-            {showPassword ? (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-                <circle cx="12" cy="12" r="3" />
-                <line x1="3" y1="3" x2="21" y2="21" />
-              </svg>
-            ) : (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </div>
-      <div>
         <label className="ds-label">Timezone</label>
         <Select
           value={timezone}
@@ -177,8 +125,9 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
         </Select>
       </div>
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
+      {message && <p className="ds-alert ds-alert-success">{message}</p>}
       <Button onClick={handleSubmit} disabled={loading} fullWidth>
-        {loading ? 'Creating account...' : 'Create Account'}
+        {loading ? 'Sending link...' : 'Send Sign-Up Link'}
       </Button>
     </AuthContainer>
   );

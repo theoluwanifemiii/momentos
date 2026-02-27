@@ -25,6 +25,34 @@ export interface EmailParams {
   replyTo?: string;
 }
 
+const extractEmailErrorMessage = (error: unknown): string => {
+  if (typeof error === "string") return error;
+  if (error instanceof Error && error.message) return error.message;
+
+  const asAny = error as any;
+  const responseMessage =
+    asAny?.response?.data?.message ||
+    asAny?.response?.data?.error ||
+    asAny?.response?.statusText;
+  if (typeof responseMessage === "string" && responseMessage.trim()) {
+    return responseMessage;
+  }
+
+  const nestedMessage =
+    asAny?.error?.message ||
+    asAny?.message ||
+    asAny?.name;
+  if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+    return nestedMessage;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown email provider error";
+  }
+};
+
 export class EmailService {
   static async send(params: EmailParams): Promise<{ id: string; success: boolean }> {
     try {
@@ -41,7 +69,9 @@ export class EmailService {
 
       if (result.error) {
         console.error('Email send error:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(
+          `EMAIL_SERVICE_ERROR: ${result.error.message || "Unknown resend error"}`
+        );
       }
 
       console.log(`Email sent: ${result.data?.id}`);
@@ -51,8 +81,9 @@ export class EmailService {
         success: true,
       };
     } catch (error: any) {
-      console.error('Email service error:', error);
-      throw error;
+      const message = extractEmailErrorMessage(error);
+      console.error('Email service error:', message);
+      throw new Error(`EMAIL_SERVICE_ERROR: ${message}`);
     }
   }
 }

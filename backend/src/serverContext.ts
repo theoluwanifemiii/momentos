@@ -94,17 +94,27 @@ const resolvePublicAppUrl = (primary?: string | null, fallback?: string | null) 
   const trimmedPrimary = primary?.trim() || "";
   const trimmedFallback = fallback?.trim() || "";
 
-  if (process.env.NODE_ENV === "production") {
-    if (trimmedPrimary && !isLocalAppUrl(trimmedPrimary)) {
-      return trimmedPrimary;
+  if (trimmedPrimary) {
+    if (process.env.NODE_ENV === "production" && isLocalAppUrl(trimmedPrimary)) {
+      console.warn(
+        `[config] APP_URL points to a local origin in production: ${trimmedPrimary}`
+      );
     }
-    if (trimmedFallback && !isLocalAppUrl(trimmedFallback)) {
-      return trimmedFallback;
-    }
-    return "https://usemomentos.xyz";
+    return trimmedPrimary;
   }
 
-  return trimmedPrimary || trimmedFallback || "http://localhost:5173";
+  if (trimmedFallback) {
+    if (process.env.NODE_ENV === "production" && isLocalAppUrl(trimmedFallback)) {
+      console.warn(
+        `[config] FRONTEND_URL points to a local origin in production: ${trimmedFallback}`
+      );
+    }
+    return trimmedFallback;
+  }
+
+  return process.env.NODE_ENV === "production"
+    ? "https://usemomentos.xyz"
+    : "http://localhost:5173";
 };
 
 export const ADMIN_APP_URL = resolvePublicAppUrl(

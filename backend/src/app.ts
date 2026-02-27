@@ -74,6 +74,7 @@ app.use(helmet());
 app.use(cors(corsDelegate));
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 app.use(
   createAdminCsrfProtection({

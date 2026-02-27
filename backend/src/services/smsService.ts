@@ -73,7 +73,19 @@ export class SMSService {
       const response = await axios.post(`${this.baseUrl}/sms/send`, payload);
       const data = (response.data || {}) as SmsProviderResponse;
       const providerCode = `${data.code || ''}`.toLowerCase();
-      const accepted = providerCode === 'ok' || Boolean(data.message_id);
+      const providerMessage = `${data.message || ''}`.toLowerCase();
+      const providerLooksFailed =
+        providerCode.includes('fail') ||
+        providerCode.includes('error') ||
+        providerCode.includes('invalid') ||
+        providerCode.includes('reject') ||
+        providerMessage.includes('fail') ||
+        providerMessage.includes('error') ||
+        providerMessage.includes('invalid') ||
+        providerMessage.includes('reject');
+      const accepted =
+        !providerLooksFailed &&
+        (providerCode === 'ok' || providerCode === 'success' || Boolean(data.message_id));
 
       if (accepted) {
         console.log(`✅ SMS accepted by provider for ${phone}: ${data.message_id || 'no-id'}`);
@@ -86,7 +98,10 @@ export class SMSService {
       console.error(`❌ SMS failed: ${data.message || JSON.stringify(data)}`);
       return {
         success: false,
-        error: data.message || 'SMS provider returned an unsuccessful response',
+        error:
+          data.message ||
+          (providerCode ? `Provider response code: ${providerCode}` : undefined) ||
+          'SMS provider returned an unsuccessful response',
       };
     } catch (error: any) {
       const errorDetail =
