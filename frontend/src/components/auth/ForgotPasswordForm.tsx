@@ -4,11 +4,11 @@ import { Button, Input } from '../ui';
 import AuthContainer from './AuthContainer';
 
 type ForgotPasswordFormProps = {
-  onSuccess: (email: string) => void;
+  onSuccess?: () => void;
   onBackToLogin: () => void;
 };
 
-// Auth: request password reset OTP.
+// Auth: request password reset magic link.
 export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotPasswordFormProps) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -25,8 +25,8 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
         method: 'POST',
         body: JSON.stringify({ email: normalizedEmail }),
       });
-      setMessage('If the account exists, a code was sent.');
-      onSuccess(normalizedEmail);
+      setMessage('If the account exists, a reset link was sent to your email.');
+      onSuccess?.();
     } catch (err: any) {
       setError(`Reset request failed: ${err.message}`);
     } finally {
@@ -37,7 +37,7 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
   return (
     <AuthContainer
       title="Reset your password"
-      subtitle="Enter your account email to receive a reset code."
+      subtitle="Enter your account email to receive a secure reset link."
       footer={(
         <button type="button" onClick={onBackToLogin} className="ds-link">
           Back to login
@@ -56,7 +56,7 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
       {message && <p className="ds-alert ds-alert-success">{message}</p>}
       <Button onClick={handleSubmit} disabled={loading} fullWidth>
-        {loading ? 'Sending...' : 'Send reset code'}
+        {loading ? 'Sending...' : 'Send reset link'}
       </Button>
     </AuthContainer>
   );

@@ -7,6 +7,7 @@ import { createHash } from "crypto";
 import { EmailService } from "../services/emailService";
 import { createRateLimiter } from "../middleware/security";
 import {
+  resetPasswordLinkTemplate,
   verifyEmailLinkTemplate,
   waitlistWelcomeTemplate,
   welcomeTemplate,
@@ -34,11 +35,10 @@ import {
   authenticateAdmin,
   createAdminSession,
   getUserErrorMessage,
-  otpService,
+  OtpPurpose,
   prisma,
   resolveFromEmail,
   revokeAdminSession,
-  OtpPurpose,
   logAdminAction,
 } from "../serverContext";
 
@@ -47,6 +47,10 @@ const buildAppUrl = (path: string) => {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;
 };
+
+const PASSWORD_RESET_LINK_TTL_MINUTES = Number(
+  process.env.PASSWORD_RESET_LINK_TTL_MINUTES || 30
+);
 
 const derivePersonalWorkspaceName = (email: string) => {
   const localPart = email.split("@")[0] || "";
@@ -92,9 +96,77 @@ const sendVerificationLink = async (params: {
     throw new Error("DEFAULT_FROM_EMAIL is not configured");
   }
 
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + VERIFY_LINK_TTL_MINUTES * 60 * 1000);
+  const now = new Date();
+
+  // Invalidate earlier links so only the latest link can be used.
+  await prisma.otp.updateMany({
+    where: {
+      email: params.user.email,
+      userId: params.user.id,
+      purpose: OtpPurpose.REGISTER_VERIFY,
+      consumedAt: null,
+    },
+    data: { consumedAt: now },
+  });
+
+  await prisma.otp.create({
+    data: {
+      email: params.user.email,
+      userId: params.user.id,
+      purpose: OtpPurpose.REGISTER_VERIFY,
+      codeHash: tokenHash,
+      expiresAt,
+      maxAttempts: 1,
+    },
+  });
+
   const { subject, text, html } = verifyEmailLinkTemplate({
     verifyUrl,
     ttlMinutes: VERIFY_LINK_TTL_MINUTES,
+  });
+
+  await EmailService.send({
+    to: params.user.email,
+    subject,
+    text,
+    html,
+    from: {
+      name: fromName,
+      email: fromEmail,
+    },
+  });
+};
+
+const passwordResetFingerprint = (passwordHash: string | null) =>
+  hashToken(passwordHash || "__NO_PASSWORD_SET__");
+
+const sendPasswordResetLink = async (params: {
+  user: { id: string; email: string; passwordHash: string | null };
+}) => {
+  const token = jwt.sign(
+    {
+      userId: params.user.id,
+      email: params.user.email,
+      purpose: "PASSWORD_RESET_LINK",
+      fingerprint: passwordResetFingerprint(params.user.passwordHash),
+    },
+    JWT_SECRET,
+    { expiresIn: `${PASSWORD_RESET_LINK_TTL_MINUTES}m` }
+  );
+
+  const resetUrl = `${buildAppUrl("/reset")}?token=${encodeURIComponent(token)}`;
+  const fromEmail = resolveFromEmail(DEFAULT_FROM_EMAIL);
+  const fromName = DEFAULT_FROM_NAME || "MomentOS";
+
+  if (!fromEmail) {
+    throw new Error("DEFAULT_FROM_EMAIL is not configured");
+  }
+
+  const { subject, text, html } = resetPasswordLinkTemplate({
+    resetUrl,
+    ttlMinutes: PASSWORD_RESET_LINK_TTL_MINUTES,
   });
 
   await EmailService.send({
@@ -683,6 +755,36 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: "Verification link is invalid" });
       }
 
+      const tokenHash = hashToken(token);
+      const verifyLinkRecord = await prisma.otp.findFirst({
+        where: {
+          email: user.email,
+          userId: user.id,
+          purpose: OtpPurpose.REGISTER_VERIFY,
+          codeHash: tokenHash,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (!verifyLinkRecord) {
+        return res
+          .status(400)
+          .json({ error: "Verification link is invalid or expired" });
+      }
+
+      const consumeResult = await prisma.otp.updateMany({
+        where: { id: verifyLinkRecord.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+
+      if (consumeResult.count === 0) {
+        return res
+          .status(400)
+          .json({ error: "Verification link is invalid or expired" });
+      }
+
       if (user.emailVerifiedAt) {
         return res.json({ success: true, message: "Account already verified" });
       }
@@ -733,29 +835,22 @@ export function registerAuthRoutes(app: Express) {
     async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        email: z.string().email(),
+        email: z.string().trim().email(),
       });
 
       const { email } = schema.parse(req.body);
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = email.toLowerCase();
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
-        include: { organization: true },
       });
 
       if (user) {
-        await otpService.createAndSendOtp({
-          email: user.email,
-          userId: user.id,
-          purpose: OtpPurpose.PASSWORD_RESET,
-          organization: user.organization,
-          asyncSend: true,
-        });
+        await sendPasswordResetLink({ user });
       }
 
       res.json({
         success: true,
-        message: "If the account exists, a code was sent.",
+        message: "If the account exists, a reset link was sent.",
       });
     } catch (err: any) {
       res.status(400).json({ error: getUserErrorMessage(err) });
@@ -768,27 +863,47 @@ export function registerAuthRoutes(app: Express) {
     async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        email: z.string().email(),
-        code: z.string().min(4),
+        token: z.string().min(20),
         password: z.string().min(8),
       });
 
-      const { email, code, password } = schema.parse(req.body);
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      const { token, password } = schema.parse(req.body);
+      let payload: {
+        userId: string;
+        email: string;
+        purpose?: string;
+        fingerprint?: string;
+      };
+      try {
+        payload = jwt.verify(token, JWT_SECRET) as {
+          userId: string;
+          email: string;
+          purpose?: string;
+          fingerprint?: string;
+        };
+      } catch {
+        return res.status(400).json({ error: "Reset link is invalid or expired" });
+      }
+
+      if (payload.purpose !== "PASSWORD_RESET_LINK") {
+        return res.status(400).json({ error: "Reset link is invalid" });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: payload.userId } });
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const result = await otpService.verifyOtpCode({
-        email: normalizedEmail,
-        purpose: OtpPurpose.PASSWORD_RESET,
-        code,
-      });
+      if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
+        return res.status(400).json({ error: "Reset link is invalid" });
+      }
 
-      if (!result.valid) {
-        return res.status(400).json({ error: result.reason });
+      if (
+        payload.fingerprint &&
+        payload.fingerprint !== passwordResetFingerprint(user.passwordHash)
+      ) {
+        return res.status(400).json({ error: "Reset link has already been used" });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);

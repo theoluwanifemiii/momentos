@@ -530,7 +530,7 @@ export default function PersonProfileModal({ api, person, onClose }: PersonProfi
                             <div className="flex items-center gap-2">
                               <span>{moment.title}</span>
                               {moment.randomizeMessage ? (
-                                <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                                   Randomized
                                 </span>
                               ) : null}

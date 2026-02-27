@@ -8,28 +8,124 @@ html {
 
 body {
   margin: 0;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-family-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 :root {
-  --ds-color-bg: #f8fafc;
+  /* blue */
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-base: #2563eb;
+
+  /* slate */
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-base: #475569;
+
+  /* green */
+  --color-green-100: #d1fae5;
+  --color-green-200: #a7f3d0;
+  --color-green-300: #6ee7b7;
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  --color-green-700: #047857;
+  --color-green-800: #065f46;
+  --color-green-base: #059669;
+
+  /* amber */
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-base: #d97706;
+
+  /* red */
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-red-base: #dc2626;
+
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  --font-family-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: 'Syne', ui-sans-serif, sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --line-height-xs: 1.5;
+  --line-height-sm: 1.5;
+  --line-height-md: 1.6;
+  --line-height-lg: 1.5;
+  --line-height-xl: 1.3;
+  --line-height-2xl: 1.1;
+  --letter-spacing-xs: 0.01em;
+  --letter-spacing-sm: -0.01em;
+  --letter-spacing-md: -0.01em;
+  --letter-spacing-lg: -0.02em;
+  --letter-spacing-xl: -0.03em;
+  --letter-spacing-2xl: -0.04em;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-popover: 0 14px 28px rgba(15, 23, 42, 0.12);
+
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 280ms;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-expressive: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* design-system semantic aliases */
+  --ds-color-bg: var(--color-slate-100);
   --ds-color-surface: #ffffff;
-  --ds-color-surface-muted: #f8fafc;
+  --ds-color-surface-muted: var(--color-slate-100);
   --ds-color-text: #0f172a;
-  --ds-color-text-muted: #475569;
-  --ds-color-border: #e2e8f0;
-  --ds-color-border-muted: #f1f5f9;
-  --ds-color-brand: #2563eb;
-  --ds-color-brand-hover: #1d4ed8;
-  --ds-color-danger: #dc2626;
-  --ds-color-danger-hover: #b91c1c;
-  --ds-radius-sm: 8px;
-  --ds-radius-md: 10px;
-  --ds-radius-lg: 14px;
-  --ds-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.08);
-  --ds-shadow-popover: 0 14px 28px rgba(15, 23, 42, 0.12);
+  --ds-color-text-muted: var(--color-slate-base);
+  --ds-color-border: var(--color-slate-200);
+  --ds-color-border-muted: var(--color-slate-100);
+  --ds-color-brand: var(--color-blue-base);
+  --ds-color-brand-hover: var(--color-blue-700);
+  --ds-color-danger: var(--color-red-base);
+  --ds-color-danger-hover: var(--color-red-700);
+  --ds-radius-sm: var(--radius-sm);
+  --ds-radius-md: var(--radius-md);
+  --ds-radius-lg: var(--radius-lg);
+  --ds-shadow-card: var(--shadow-card);
+  --ds-shadow-popover: var(--shadow-popover);
 }
 
 @layer base {
@@ -41,7 +137,8 @@ body {
 
 @layer components {
   .ds-page {
-    @apply min-h-screen bg-slate-50;
+    @apply min-h-screen;
+    background-color: var(--ds-color-bg);
   }
 
   .ds-surface {
@@ -93,8 +190,10 @@ body {
   }
 
   .ds-btn {
-    @apply inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
     border-radius: var(--ds-radius-md);
+    transition-duration: var(--duration-normal);
+    transition-timing-function: var(--easing-standard);
   }
 
   .ds-btn-md {
@@ -144,7 +243,8 @@ body {
   }
 
   .ds-link {
-    @apply text-sm font-medium text-blue-600 transition-colors;
+    @apply text-sm font-medium transition-colors;
+    color: var(--ds-color-brand);
   }
 
   .ds-link:hover {
@@ -157,15 +257,21 @@ body {
   }
 
   .ds-alert-success {
-    @apply border-emerald-200 bg-emerald-50 text-emerald-700;
+    border-color: var(--color-green-200);
+    background-color: var(--color-green-100);
+    color: var(--color-green-700);
   }
 
   .ds-alert-error {
-    @apply border-red-200 bg-red-50 text-red-700;
+    border-color: var(--color-red-200);
+    background-color: var(--color-red-100);
+    color: var(--color-red-700);
   }
 
   .ds-alert-info {
-    @apply border-blue-200 bg-blue-50 text-blue-700;
+    border-color: var(--color-blue-200);
+    background-color: var(--color-blue-100);
+    color: var(--color-blue-700);
   }
 
   .ds-tablist {
@@ -182,7 +288,8 @@ body {
   }
 
   .ds-tab-active {
-    @apply bg-blue-600 text-white;
+    background-color: var(--ds-color-brand);
+    color: #fff;
   }
 
   .ds-table-wrap {
@@ -230,11 +337,13 @@ body {
   }
 
   .ds-file-input::file-selector-button {
-    @apply mr-4 rounded-md border-0 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors;
+    @apply mr-4 rounded-md border-0 px-4 py-2 text-sm font-medium transition-colors;
+    background-color: var(--color-blue-100);
+    color: var(--color-blue-700);
   }
 
   .ds-file-input::file-selector-button:hover {
-    @apply bg-blue-100;
+    background-color: var(--color-blue-200);
   }
 
   .ds-icon-trigger {
@@ -354,11 +463,13 @@ body {
   }
 
   .admin-status-pill-success {
-    @apply bg-emerald-50 text-emerald-700;
+    background-color: var(--color-green-100);
+    color: var(--color-green-700);
   }
 
   .admin-status-pill-danger {
-    @apply bg-rose-50 text-rose-700;
+    background-color: var(--color-red-100);
+    color: var(--color-red-700);
   }
 
   .admin-status-pill-muted {
@@ -366,7 +477,8 @@ body {
   }
 
   .admin-status-pill-info {
-    @apply bg-blue-50 text-blue-700;
+    background-color: var(--color-blue-100);
+    color: var(--color-blue-700);
   }
 }
 

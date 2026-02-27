@@ -11,7 +11,7 @@ type AuthContainerProps = {
 export default function AuthContainer({ title, subtitle, children, footer }: AuthContainerProps) {
   return (
     <Card className="overflow-hidden">
-      <div className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500" />
+      <div className="h-1.5 bg-gradient-to-r from-blue-500 via-blue-700 to-blue-400" />
       <CardBody className="space-y-5 p-7">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-slate-900">{title}</h1>

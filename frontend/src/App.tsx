@@ -144,10 +144,6 @@ export default function MomentOSApp() {
               ) : (
                 <AuthLayout>
                   <ForgotPasswordForm
-                    onSuccess={(email: string) => {
-                      setPendingEmail(email);
-                      navigate('/reset');
-                    }}
                     onBackToLogin={() => navigate('/login')}
                   />
                 </AuthLayout>
@@ -162,7 +158,6 @@ export default function MomentOSApp() {
               ) : (
                 <AuthLayout>
                   <ResetPasswordForm
-                    email={pendingEmail}
                     onSuccess={() => navigate('/login')}
                     onBackToLogin={() => navigate('/login')}
                   />

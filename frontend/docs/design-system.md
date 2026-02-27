@@ -15,11 +15,11 @@ This is the shared UI contract for frontend screens.
   - Warning: `amber.base`
   - Danger: `red.base`
 - Radius
-  - Standard: `rounded-ds`
-  - Elevated card/modal: `rounded-ds-lg`
+  - Standard: `radius.md` (10px)
+  - Elevated card/modal: `radius.lg` (14px)
 - Shadow
-  - Base container: `shadow-ds`
-  - Popover/menu: `shadow-popover`
+  - Base container: `shadow.card`
+  - Popover/menu: `shadow.popover`
 
 Source of truth:
 - Tailwind theme: `frontend/tailwind.config.js`

@@ -350,7 +350,7 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
               <span className="rounded-full bg-slate-100 px-3 py-1">
                 {moments.length} broadcast moments
               </span>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+              <span className="rounded-full bg-green-100 px-3 py-1 text-green-700">
                 {activeMomentsCount} active
               </span>
               <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">Type: Broadcast</span>
@@ -578,7 +578,7 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
                           Broadcast
                         </span>
                         {moment.randomizeMessage ? (
-                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                             Randomized
                           </span>
                         ) : null}

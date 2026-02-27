@@ -169,7 +169,7 @@ export default function AdminOrganizations() {
                           onClick={() => handleReactivate(org.id)}
                           size="sm"
                           variant="secondary"
-                          className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          className="border-green-200 text-green-700 hover:bg-green-100"
                         >
                           Reactivate
                         </Button>
@@ -178,7 +178,7 @@ export default function AdminOrganizations() {
                           onClick={() => handleSuspend(org.id)}
                           size="sm"
                           variant="secondary"
-                          className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                          className="border-red-200 text-red-700 hover:bg-red-100"
                         >
                           Suspend
                         </Button>

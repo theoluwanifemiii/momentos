@@ -154,7 +154,7 @@ export default function AdminDeliveryLogs() {
                   <td className="ds-td">
                     {log.sentAt ? new Date(log.sentAt).toLocaleString() : "—"}
                   </td>
-                  <td className="ds-td text-xs text-rose-700">{log.errorMessage || "—"}</td>
+                  <td className="ds-td text-xs text-red-700">{log.errorMessage || "—"}</td>
                   <td className="ds-td">
                     <div className="flex justify-end">
                       {log.status === "FAILED" ? (

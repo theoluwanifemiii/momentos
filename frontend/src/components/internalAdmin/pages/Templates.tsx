@@ -228,7 +228,7 @@ export default function AdminTemplates() {
                           onClick={() => handleDisable(template.id)}
                           size="sm"
                           variant="secondary"
-                          className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                          className="border-red-200 text-red-700 hover:bg-red-100"
                         >
                           Disable
                         </Button>

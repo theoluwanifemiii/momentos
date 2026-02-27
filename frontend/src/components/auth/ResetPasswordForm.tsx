@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Button, Input } from '../ui';
 import AuthContainer from './AuthContainer';
 
 type ResetPasswordFormProps = {
-  email: string;
   onSuccess: () => void;
   onBackToLogin: () => void;
 };
 
-// Auth: reset password using OTP and new password.
-export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: ResetPasswordFormProps) {
-  const [code, setCode] = useState('');
+// Auth: reset password using magic link token and new password.
+export default function ResetPasswordForm({ onSuccess, onBackToLogin }: ResetPasswordFormProps) {
+  const token = useMemo(
+    () => new URLSearchParams(window.location.search).get('token')?.trim() || '',
+    [],
+  );
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +21,11 @@ export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: R
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    if (!token) {
+      setError('Reset link is missing or invalid. Request a new reset link.');
+      return;
+    }
+
     if (password.length < 8) {
       setError('Password must be at least 8 characters');
       return;
@@ -28,10 +35,9 @@ export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: R
     setMessage('');
     setLoading(true);
     try {
-      const normalizedEmail = email.trim().toLowerCase();
       await api.call('/auth/password/reset', {
         method: 'POST',
-        body: JSON.stringify({ email: normalizedEmail, code, password }),
+        body: JSON.stringify({ token, password }),
       });
       setMessage('Password updated. You can sign in.');
       onSuccess();
@@ -45,22 +51,18 @@ export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: R
   return (
     <AuthContainer
       title="Set a new password"
-      subtitle={`For ${email}`}
+      subtitle="Use the secure link from your email to set a new password."
       footer={(
         <button type="button" onClick={onBackToLogin} className="ds-link">
           Back to login
         </button>
       )}
     >
-      <div>
-        <label className="ds-label">Reset code</label>
-        <Input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="123456"
-        />
-      </div>
+      {!token ? (
+        <p className="ds-alert ds-alert-info">
+          This reset link is invalid or missing. Request a new one from Forgot Password.
+        </p>
+      ) : null}
       <div>
         <label className="ds-label">New password</label>
         <div className="relative">
@@ -112,7 +114,7 @@ export default function ResetPasswordForm({ email, onSuccess, onBackToLogin }: R
       </div>
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
       {message && <p className="ds-alert ds-alert-success">{message}</p>}
-      <Button onClick={handleSubmit} disabled={loading} fullWidth>
+      <Button onClick={handleSubmit} disabled={loading || !token} fullWidth>
         {loading ? 'Updating...' : 'Update password'}
       </Button>
     </AuthContainer>

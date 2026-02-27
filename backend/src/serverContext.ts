@@ -78,12 +78,43 @@ export const ADMIN_INVITE_FROM_EMAIL =
   process.env.ADMIN_INVITE_FROM_EMAIL || "admin@mail.usemomentos.xyz";
 export const ADMIN_INVITE_FROM_NAME =
   process.env.ADMIN_INVITE_FROM_NAME || "MomentOS Admin";
-export const ADMIN_APP_URL =
-  process.env.ADMIN_APP_URL ||
-  process.env.FRONTEND_URL ||
-  "http://localhost:5173";
-export const APP_URL =
-  process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:5173";
+
+const LOCALHOST_HOSTNAME = /^(localhost|127\.0\.0\.1|\[::1\])$/i;
+const isLocalAppUrl = (value?: string | null) => {
+  if (!value) return true;
+  try {
+    const parsed = new URL(value);
+    return LOCALHOST_HOSTNAME.test(parsed.hostname);
+  } catch {
+    return true;
+  }
+};
+
+const resolvePublicAppUrl = (primary?: string | null, fallback?: string | null) => {
+  const trimmedPrimary = primary?.trim() || "";
+  const trimmedFallback = fallback?.trim() || "";
+
+  if (process.env.NODE_ENV === "production") {
+    if (trimmedPrimary && !isLocalAppUrl(trimmedPrimary)) {
+      return trimmedPrimary;
+    }
+    if (trimmedFallback && !isLocalAppUrl(trimmedFallback)) {
+      return trimmedFallback;
+    }
+    return "https://usemomentos.xyz";
+  }
+
+  return trimmedPrimary || trimmedFallback || "http://localhost:5173";
+};
+
+export const ADMIN_APP_URL = resolvePublicAppUrl(
+  process.env.ADMIN_APP_URL,
+  process.env.FRONTEND_URL
+);
+export const APP_URL = resolvePublicAppUrl(
+  process.env.APP_URL,
+  process.env.FRONTEND_URL
+);
 export const VERIFY_LINK_TTL_MINUTES = Number(
   process.env.VERIFY_LINK_TTL_MINUTES || 60
 );
