@@ -94,7 +94,7 @@ export function registerPeopleRoutes(app: Express) {
 
         const onboarding = await computeOnboardingState(
           prisma,
-          req.organizationId!
+          req.organizationId!,
         );
 
         const headers = CSVValidator.extractHeaders(csvContent);
@@ -126,7 +126,7 @@ export function registerPeopleRoutes(app: Express) {
           .status(500)
           .json({ error: "Upload failed", details: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // List people
@@ -148,7 +148,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Export people as CSV
@@ -200,7 +200,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Get upcoming birthdays (next 30 days)
@@ -230,7 +230,7 @@ export function registerPeopleRoutes(app: Express) {
           .filter((person) => {
             const nextOccurrence = getNextBirthdayOccurrence(
               person.birthday,
-              today
+              today,
             );
             return nextOccurrence <= windowEnd;
           })
@@ -244,7 +244,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Download sample CSV
@@ -253,7 +253,7 @@ export function registerPeopleRoutes(app: Express) {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=sample-people.csv"
+      "attachment; filename=sample-people.csv",
     );
     res.send(csv);
   });
@@ -318,14 +318,14 @@ export function registerPeopleRoutes(app: Express) {
 
         const onboarding = await computeOnboardingState(
           prisma,
-          req.organizationId!
+          req.organizationId!,
         );
 
         res.json({ person, onboarding });
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Update person
@@ -343,7 +343,7 @@ export function registerPeopleRoutes(app: Express) {
         if ("phone" in safeData) {
           try {
             const normalizedPhone = normalizeOptionalPhone(
-              (safeData as any).phone
+              (safeData as any).phone,
             );
             safeData = { ...safeData, phone: normalizedPhone };
           } catch (error: any) {
@@ -365,7 +365,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Delete person
@@ -387,7 +387,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Bulk delete people
@@ -413,7 +413,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Bulk opt-out or opt-in people
@@ -441,7 +441,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Send birthday email now (manual trigger per person).
@@ -521,7 +521,7 @@ export function registerPeopleRoutes(app: Express) {
         }
 
         const fromEmail = resolveFromEmail(
-          org?.emailFromAddress || DEFAULT_FROM_EMAIL
+          org?.emailFromAddress || DEFAULT_FROM_EMAIL,
         );
 
         if (!fromEmail) {
@@ -555,7 +555,7 @@ export function registerPeopleRoutes(app: Express) {
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // Send birthday SMS now (manual trigger per person).
@@ -578,14 +578,19 @@ export function registerPeopleRoutes(app: Express) {
         });
 
         if (!person) {
+          console.error(
+            `Person with ID ${id} not found for organization ${req.organizationId}`,
+          );
           return res.status(404).json({ error: "Person not found" });
         }
 
         if (person.optedOut) {
+          console.error(`Person with ID ${id} has opted out of communications`);
           return res.status(400).json({ error: "Person has opted out" });
         }
 
         if (!person.phone) {
+          console.error(`Person with ID ${id} does not have a phone number`);
           return res
             .status(400)
             .json({ error: "Person does not have a phone number" });
@@ -596,6 +601,9 @@ export function registerPeopleRoutes(app: Express) {
         });
 
         if (!org?.smsEnabled) {
+          console.error(
+            `Organization with ID ${req.organizationId} does not have SMS enabled`,
+          );
           return res
             .status(400)
             .json({ error: "Enable SMS in Settings before sending." });
@@ -611,6 +619,9 @@ export function registerPeopleRoutes(app: Express) {
         });
 
         if (!templateAssignment) {
+          console.error(
+            `No default template found for organization ${req.organizationId}`,
+          );
           return res.status(400).json({ error: "No default template found" });
         }
 
@@ -624,7 +635,7 @@ export function registerPeopleRoutes(app: Express) {
 
         const interpolatedContent = interpolateTemplate(
           template.content,
-          variables
+          variables,
         );
         const smsContent = toSmsText(data.message || interpolatedContent);
 
@@ -672,7 +683,7 @@ export function registerPeopleRoutes(app: Express) {
         console.log("Send SMS error:", err);
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
-    }
+    },
   );
 
   // ============================================================================
