@@ -24,7 +24,6 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
     emailFromAddress: '',
     smsEnabled: false,
     whatsappEnabled: false,
-    senderId: 'MomentOS',
     timezone: 'UTC',
     birthdaySendHour: 9,
     birthdaySendMinute: 0,
@@ -45,7 +44,6 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
         emailFromAddress: org.emailFromAddress || '',
         smsEnabled: Boolean(org.smsEnabled),
         whatsappEnabled: Boolean(org.whatsappEnabled),
-        senderId: org.senderId || 'MomentOS',
         timezone: org.timezone || 'UTC',
         birthdaySendHour: org.birthdaySendHour ?? 9,
         birthdaySendMinute: org.birthdaySendMinute ?? 0,
@@ -69,7 +67,6 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
           emailFromAddress: form.emailFromAddress || null,
           smsEnabled: form.smsEnabled,
           whatsappEnabled: form.whatsappEnabled,
-          senderId: form.senderId || null,
           timezone: form.timezone,
           birthdaySendHour: Number(form.birthdaySendHour),
           birthdaySendMinute: Number(form.birthdaySendMinute),
@@ -186,23 +183,6 @@ export default function Settings({ api, onboarding, onOnboardingUpdate, onSelect
               Sends birthday messages to WhatsApp numbers when available.
             </p>
           </div>
-          {form.smsEnabled && (
-            <div className="md:col-span-2">
-              <label className="ds-label">SMS Sender ID</label>
-              <Input
-                type="text"
-                value={form.senderId}
-                onChange={(e) =>
-                  setForm({ ...form, senderId: e.target.value.substring(0, 11) })
-                }
-                placeholder="MomentOS"
-                maxLength={11}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Max 11 characters. Sender ID must be approved by Termii.
-              </p>
-            </div>
-          )}
           <div>
             <label className="ds-label">Timezone</label>
             <Select

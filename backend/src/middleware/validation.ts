@@ -26,11 +26,11 @@ export const SettingsUpdateSchema = z
         message: "Invalid timezone",
       })
       .optional(),
-    emailFromName: z.string().optional(),
-    emailFromAddress: z.string().email().optional(),
+    emailFromName: z.string().nullable().optional(),
+    emailFromAddress: z.string().email().nullable().optional(),
     smsEnabled: z.boolean().optional(),
     whatsappEnabled: z.boolean().optional(),
-    senderId: z.string().max(11).optional(),
+    senderId: z.string().max(11).nullable().optional(),
     birthdaySendHour: z.number().min(0).max(23).optional(),
     birthdaySendMinute: z.number().min(0).max(59).optional(),
   })
