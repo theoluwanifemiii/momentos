@@ -637,6 +637,9 @@ export function registerPeopleRoutes(app: Express) {
           message: smsContent,
           senderId: org.senderId || "MomentOS",
         });
+        const mockedNotice = smsResult.mocked
+          ? "SMS test mode is enabled. Message was mocked and not delivered."
+          : null;
 
         await prisma.deliveryLog.create({
           data: {
@@ -649,7 +652,7 @@ export function registerPeopleRoutes(app: Express) {
             sentAt: smsResult.success ? new Date() : null,
             deliveredAt: null,
             externalId: smsResult.messageId,
-            errorMessage: smsResult.error,
+            errorMessage: mockedNotice || smsResult.error,
           },
         });
 
@@ -662,6 +665,8 @@ export function registerPeopleRoutes(app: Express) {
         res.json({
           success: true,
           messageId: smsResult.messageId,
+          mocked: Boolean(smsResult.mocked),
+          message: mockedNotice || "SMS accepted by provider.",
         });
       } catch (err: any) {
         console.log("Send SMS error:", err);

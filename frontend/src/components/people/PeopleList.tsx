@@ -114,8 +114,17 @@ export default function PeopleList({
     setSendMessage('');
     setSendingAction(`${personId}:sms`);
     try {
-      await api.call(`/people/${personId}/send-sms`, { method: 'POST', body: JSON.stringify({}) });
-      setSendMessage('Birthday SMS sent.');
+      const result = await api.call(`/people/${personId}/send-sms`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (result?.mocked) {
+        setSendMessage(
+          result?.message || 'SMS test mode is enabled. Message was mocked and not delivered.'
+        );
+      } else {
+        setSendMessage('Birthday SMS sent.');
+      }
     } catch (err: any) {
       setSendMessage(err.message);
     } finally {

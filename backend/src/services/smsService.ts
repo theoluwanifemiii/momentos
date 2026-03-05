@@ -13,6 +13,13 @@ type SmsProviderResponse = {
   [key: string]: unknown;
 };
 
+type SmsSendResult = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  mocked?: boolean;
+};
+
 export class SMSService {
   private apiKey: string;
   private baseUrl = 'https://v3.api.termii.com/api';
@@ -39,16 +46,12 @@ export class SMSService {
   /**
    * Send SMS via Termii
    */
-  async send(params: SMSParams): Promise<{
-    success: boolean;
-    messageId?: string;
-    error?: string;
-  }> {
+  async send(params: SMSParams): Promise<SmsSendResult> {
     if (this.testMode) {
       const phone = this.formatPhoneNumber(params.to);
       const messageId = `mock-${Date.now()}`;
       console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
-      return { success: true, messageId };
+      return { success: true, messageId, mocked: true };
     }
     if (!this.apiKey) {
       return { success: false, error: 'TERMII_API_KEY is not configured' };
@@ -115,6 +118,10 @@ export class SMSService {
         error: typeof errorDetail === 'string' ? errorDetail : 'SMS request failed',
       };
     }
+  }
+
+  isInTestMode() {
+    return this.testMode;
   }
 
   /**
@@ -216,10 +223,19 @@ export class SMSService {
 
   private resolveSenderId(candidate?: string) {
     const value = (candidate || '').trim();
+    const defaultSender = this.defaultSenderId.slice(0, 11);
     if (value) {
-      return value.slice(0, 11);
+      const normalizedCandidate = value.slice(0, 11);
+      if (
+        normalizedCandidate.toLowerCase() === 'momentos' &&
+        defaultSender &&
+        defaultSender.toLowerCase() !== 'momentos'
+      ) {
+        return defaultSender;
+      }
+      return normalizedCandidate;
     }
-    return this.defaultSenderId.slice(0, 11);
+    return defaultSender;
   }
 }
 

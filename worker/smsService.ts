@@ -174,10 +174,19 @@ export class SMSService {
 
   private resolveSenderId(candidate?: string) {
     const value = (candidate || '').trim();
+    const defaultSender = this.defaultSenderId.slice(0, 11);
     if (value) {
-      return value.slice(0, 11);
+      const normalizedCandidate = value.slice(0, 11);
+      if (
+        normalizedCandidate.toLowerCase() === 'momentos' &&
+        defaultSender &&
+        defaultSender.toLowerCase() !== 'momentos'
+      ) {
+        return defaultSender;
+      }
+      return normalizedCandidate;
     }
-    return this.defaultSenderId.slice(0, 11);
+    return defaultSender;
   }
 }
 
