@@ -1354,12 +1354,11 @@ From everyone at {{organization_name}}`,
   private shouldRunForOrg(org: {
     timezone: string;
     birthdaySendHour: number;
-    birthdaySendMinute: number;
     birthdayLastRunAt: Date | null;
   }) {
     const local = this.getOrgNow(org.timezone || 'UTC');
 
-    if (local.hour !== org.birthdaySendHour || local.minute !== org.birthdaySendMinute) {
+    if (local.hour !== org.birthdaySendHour) {
       return false;
     }
 
@@ -1383,7 +1382,6 @@ From everyone at {{organization_name}}`,
         id: true,
         timezone: true,
         birthdaySendHour: true,
-        birthdaySendMinute: true,
         birthdayLastRunAt: true,
       },
     });
@@ -1410,9 +1408,9 @@ From everyone at {{organization_name}}`,
   }
 
   startCron() {
-    console.log('Scheduling birthday checks every minute.');
+    console.log('Scheduling birthday checks every hour.');
 
-    cron.schedule('* * * * *', async () => {
+    cron.schedule('0 * * * *', async () => {
       console.log(`Running scheduled birthday check: ${new Date().toISOString()}`);
       try {
         await this.run();
