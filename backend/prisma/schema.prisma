@@ -149,6 +149,9 @@ model DeliveryLog {
   Moment         Moment?         @relation(fields: [momentId], references: [id])
   momentId       String?
 
+  @@index([organizationId, personId, channel, scheduledFor])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, createdAt])
   @@map("delivery_logs")
 }
 
@@ -375,6 +378,7 @@ enum UserRole {
 enum OtpPurpose {
   REGISTER_VERIFY
   PASSWORD_RESET
+  AUTH_MAGIC_LINK
 }
 
 enum TemplateType {

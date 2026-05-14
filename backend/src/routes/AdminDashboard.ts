@@ -16,158 +16,102 @@ app.get(
     try {
       const orgId = req.organizationId!;
 
-      // Get counts
-      const peopleCount = await prisma.person.count({
-        where: { organizationId: orgId, optedOut: false },
-      });
-
-      const templateCount = await prisma.organizationTemplate.count({
-        where: { organizationId: orgId },
-      });
-
-      const activeTemplateCount = await prisma.organizationTemplate.count({
-        where: { organizationId: orgId, isActive: true },
-      });
-
-      // Get today's deliveries
-      const today = new Date();
+      const now = new Date();
+      const today = new Date(now);
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const todayDeliveries = await prisma.deliveryLog.count({
-        where: {
-          organizationId: orgId,
-          createdAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-        },
-      });
-
-      const todaySuccessful = await prisma.deliveryLog.count({
-        where: {
-          organizationId: orgId,
-          createdAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-          status: { in: ["SENT", "DELIVERED"] },
-        },
-      });
-
-      const todayFailed = await prisma.deliveryLog.count({
-        where: {
-          organizationId: orgId,
-          createdAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-          status: "FAILED",
-        },
-      });
-
-      const totalSuccessful = await prisma.deliveryLog.count({
-        where: {
-          organizationId: orgId,
-          status: { in: ["SENT", "DELIVERED"] },
-        },
-      });
-
-      const totalDeliveries = await prisma.deliveryLog.count({
-        where: { organizationId: orgId },
-      });
-
-      const now = new Date();
       const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const [failedLast24h, failedLast7d, failedByChannelLast24h, recentSystemErrors] =
-        await Promise.all([
-          prisma.deliveryLog.count({
-            where: {
-              organizationId: orgId,
-              status: "FAILED",
-              createdAt: { gte: since24h },
-            },
-          }),
-          prisma.deliveryLog.count({
-            where: {
-              organizationId: orgId,
-              status: "FAILED",
-              createdAt: { gte: since7d },
-            },
-          }),
-          prisma.deliveryLog.groupBy({
-            by: ["channel"],
-            where: {
-              organizationId: orgId,
-              status: "FAILED",
-              createdAt: { gte: since24h },
-            },
-            _count: {
-              _all: true,
-            },
-          }),
-          prisma.systemErrorLog.findMany({
-            where: {
-              OR: [{ organizationId: orgId }, { organizationId: null }],
-              createdAt: { gte: since7d },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 10,
-          }),
-        ]);
+      const [
+        peopleCount,
+        templateCount,
+        activeTemplateCount,
+        todayDeliveries,
+        todaySuccessful,
+        todayFailed,
+        totalSuccessful,
+        totalDeliveries,
+        failedLast24h,
+        failedLast7d,
+        failedByChannelLast24h,
+        recentSystemErrors,
+        people,
+        org,
+        recentActivity,
+      ] = await Promise.all([
+        prisma.person.count({
+          where: { organizationId: orgId, optedOut: false },
+        }),
+        prisma.organizationTemplate.count({
+          where: { organizationId: orgId },
+        }),
+        prisma.organizationTemplate.count({
+          where: { organizationId: orgId, isActive: true },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, createdAt: { gte: today, lt: tomorrow } },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, createdAt: { gte: today, lt: tomorrow }, status: { in: ["SENT", "DELIVERED"] } },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, createdAt: { gte: today, lt: tomorrow }, status: "FAILED" },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, status: { in: ["SENT", "DELIVERED"] } },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, status: "FAILED", createdAt: { gte: since24h } },
+        }),
+        prisma.deliveryLog.count({
+          where: { organizationId: orgId, status: "FAILED", createdAt: { gte: since7d } },
+        }),
+        prisma.deliveryLog.groupBy({
+          by: ["channel"],
+          where: { organizationId: orgId, status: "FAILED", createdAt: { gte: since24h } },
+          _count: { _all: true },
+        }),
+        prisma.systemErrorLog.findMany({
+          where: { OR: [{ organizationId: orgId }, { organizationId: null }], createdAt: { gte: since7d } },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        }),
+        prisma.person.findMany({
+          where: { organizationId: orgId, optedOut: false },
+          select: { birthday: true },
+        }),
+        prisma.organization.findUnique({
+          where: { id: orgId },
+          select: { timezone: true },
+        }),
+        prisma.deliveryLog.findMany({
+          where: { organizationId: orgId },
+          include: { person: true, template: true },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        }),
+      ]);
 
-      const failedByChannel = {
-        email: 0,
-        sms: 0,
-        whatsapp: 0,
-      };
+      const failedByChannel = { email: 0, sms: 0, whatsapp: 0 };
       for (const row of failedByChannelLast24h) {
         if (row.channel in failedByChannel) {
-          failedByChannel[row.channel as "email" | "sms" | "whatsapp"] =
-            row._count._all;
+          failedByChannel[row.channel as "email" | "sms" | "whatsapp"] = row._count._all;
         }
       }
 
-      // Get upcoming birthdays (next 7 days)
-      const people = await prisma.person.findMany({
-        where: {
-          organizationId: orgId,
-          optedOut: false,
-        },
-      });
-
-      const orgNow = getOrgDateTime(
-        (
-          await prisma.organization.findUnique({
-            where: { id: orgId },
-            select: { timezone: true },
-          })
-        )?.timezone
-      );
+      const orgNow = getOrgDateTime(org?.timezone);
       const orgToday = orgNow.startOf("day");
       const windowEnd = orgToday.plus({ days: 7 }).endOf("day");
 
       const upcomingBirthdays = people.filter((person) => {
-        const nextOccurrence = getNextBirthdayOccurrence(
-          person.birthday,
-          orgToday
-        );
+        const nextOccurrence = getNextBirthdayOccurrence(person.birthday, orgToday);
         return nextOccurrence <= windowEnd;
       }).length;
-
-      // Get recent activity (last 10 deliveries)
-      const recentActivity = await prisma.deliveryLog.findMany({
-        where: { organizationId: orgId },
-        include: {
-          person: true,
-          template: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      });
 
       res.json({
         stats: {

@@ -1386,23 +1386,25 @@ From everyone at {{organization_name}}`,
       },
     });
 
-    for (const org of organizations) {
-      if (this.shouldRunForOrg(org)) {
-        try {
-          await this.processOrganization(org.id);
-        } catch (error: any) {
-          await this.logSystemError({
-            category: 'organization_run_failed',
-            message: `Organization run failed for ${org.id}: ${error?.message || error}`,
-            severity: ErrorSeverity.ERROR,
-            organizationId: org.id,
-            metadata: {
-              stack: error?.stack || null,
-            } as Prisma.InputJsonValue,
-          });
-        }
-      }
-    }
+    await Promise.all(
+      organizations
+        .filter((org) => this.shouldRunForOrg(org))
+        .map(async (org) => {
+          try {
+            await this.processOrganization(org.id);
+          } catch (error: any) {
+            await this.logSystemError({
+              category: 'organization_run_failed',
+              message: `Organization run failed for ${org.id}: ${error?.message || error}`,
+              severity: ErrorSeverity.ERROR,
+              organizationId: org.id,
+              metadata: {
+                stack: error?.stack || null,
+              } as Prisma.InputJsonValue,
+            });
+          }
+        })
+    );
 
     console.log('Scheduler run complete.');
   }
