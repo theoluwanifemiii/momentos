@@ -22,7 +22,7 @@ export class SMSService {
   constructor() {
     this.apiKey = process.env.TERMII_API_KEY || '';
     this.testMode = this.isTestModeEnabled();
-    this.defaultSenderId = (process.env.TERMII_SMS_FROM || 'MomentOS').trim();
+    this.defaultSenderId = (process.env.TERMII_SMS_FROM || 'Moment OS').trim();
     this.channel = (process.env.TERMII_SMS_CHANNEL || 'generic').trim() || 'generic';
     this.notifyUrl = (process.env.TERMII_SMS_NOTIFY_URL || '').trim() || undefined;
 

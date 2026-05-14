@@ -868,7 +868,7 @@ From everyone at {{organization_name}}`,
       const smsResult = await smsService.send({
         to: person.phone,
         message: toPlainText(content, 160),
-        senderId: org.senderId || 'MomentOS',
+        senderId: org.senderId || 'Moment OS',
       });
 
       await this.logDelivery({
@@ -946,7 +946,7 @@ From everyone at {{organization_name}}`,
       const whatsappResult = await whatsappService.send({
         to: person.phone,
         message,
-        from: org.senderId || process.env.TERMII_WHATSAPP_FROM || 'MomentOS',
+        from: org.senderId || process.env.TERMII_WHATSAPP_FROM || 'Moment OS',
       });
 
       await this.logDelivery({
