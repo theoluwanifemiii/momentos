@@ -23,6 +23,7 @@ import {
   prisma,
   resolveFromEmail,
 } from "../serverContext";
+import posthog from "../lib/posthog";
 
 export function registerPeopleRoutes(app: Express) {
   const escapeHtml = (value: string) =>
@@ -112,6 +113,16 @@ export function registerPeopleRoutes(app: Express) {
             console.warn("AI CSV suggestion failed:", error);
           }
         }
+
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "people_csv_uploaded",
+          properties: {
+            rows_valid: validation.summary.validRows,
+            rows_invalid: validation.summary.errorRows,
+            organization_id: req.organizationId,
+          },
+        });
 
         res.json({
           success: true,
@@ -320,6 +331,16 @@ export function registerPeopleRoutes(app: Express) {
           prisma,
           req.organizationId!,
         );
+
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "person_added",
+          properties: {
+            person_id: person.id,
+            organization_id: req.organizationId,
+            has_phone: Boolean(person.phone),
+          },
+        });
 
         res.json({ person, onboarding });
       } catch (err: any) {
@@ -551,6 +572,17 @@ export function registerPeopleRoutes(app: Express) {
           },
         });
 
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "birthday_email_sent",
+          properties: {
+            person_id: person.id,
+            template_id: template.id,
+            organization_id: req.organizationId,
+            manual: true,
+          },
+        });
+
         res.json({ success: true });
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
@@ -672,6 +704,17 @@ export function registerPeopleRoutes(app: Express) {
             error: smsResult.error || "SMS failed to send",
           });
         }
+
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "birthday_sms_sent",
+          properties: {
+            person_id: person.id,
+            organization_id: req.organizationId,
+            mocked: Boolean(smsResult.mocked),
+            manual: true,
+          },
+        });
 
         res.json({
           success: true,
