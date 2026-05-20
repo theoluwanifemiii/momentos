@@ -1376,10 +1376,24 @@ From everyone at {{organization_name}}`,
     return lastLocal !== local.toISODate();
   }
 
+  private async withDbRetry<T>(fn: () => Promise<T>, maxAttempts = 3, delayMs = 5000): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        const isConnErr = err?.message?.includes("Can't reach database") || err?.code === 'P1001';
+        if (!isConnErr || attempt === maxAttempts) throw err;
+        console.warn(`[DB] Connection failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    throw new Error('unreachable');
+  }
+
   async run() {
     console.log('Birthday scheduler started.');
 
-    const organizations = await prisma.organization.findMany({
+    const organizations = await this.withDbRetry(() => prisma.organization.findMany({
       where: { isSuspended: false },
       select: {
         id: true,
@@ -1387,7 +1401,7 @@ From everyone at {{organization_name}}`,
         birthdaySendHour: true,
         birthdayLastRunAt: true,
       },
-    });
+    }));
 
     await Promise.all(
       organizations
