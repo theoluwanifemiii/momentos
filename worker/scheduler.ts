@@ -443,25 +443,28 @@ class BirthdayScheduler {
 
   async reportSchedulerCrash(error: unknown, phase: string) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
-    await this.logSystemError({
-      category: 'scheduler_crash',
-      message: `Scheduler failure during ${phase}: ${message}`,
-      severity: ErrorSeverity.CRITICAL,
-      metadata: {
-        phase,
-      } as Prisma.InputJsonValue,
-    });
+    console.error(`[SCHEDULER CRASH] phase=${phase}`, message);
 
-    await this.sendAlert({
-      alertKey: `scheduler-crash:${phase}`,
-      subject: `[MomentOS CRITICAL] Scheduler failure (${phase})`,
-      text: [
-        `Phase: ${phase}`,
-        `Time: ${new Date().toISOString()}`,
-        '',
-        message,
-      ].join('\n'),
-    });
+    try {
+      await this.logSystemError({
+        category: 'scheduler_crash',
+        message: `Scheduler failure during ${phase}: ${message}`,
+        severity: ErrorSeverity.CRITICAL,
+        metadata: { phase } as Prisma.InputJsonValue,
+      });
+    } catch (dbErr) {
+      console.error('[SCHEDULER CRASH] Could not write error to DB (DB may be unreachable):', dbErr);
+    }
+
+    try {
+      await this.sendAlert({
+        alertKey: `scheduler-crash:${phase}`,
+        subject: `[MomentOS CRITICAL] Scheduler failure (${phase})`,
+        text: [`Phase: ${phase}`, `Time: ${new Date().toISOString()}`, '', message].join('\n'),
+      });
+    } catch (alertErr) {
+      console.error('[SCHEDULER CRASH] Could not send alert email:', alertErr);
+    }
   }
 
   private getOrgNow(timezone?: string | null) {
@@ -1417,13 +1420,21 @@ From everyone at {{organization_name}}`,
       try {
         await this.run();
       } catch (error) {
-        await this.reportSchedulerCrash(error, 'cron_tick');
+        try {
+          await this.reportSchedulerCrash(error, 'cron_tick');
+        } catch (reportErr) {
+          console.error('[SCHEDULER] Failed to report crash:', reportErr);
+        }
       }
     });
 
     console.log('Running initial check.');
     void this.run().catch(async (error) => {
-      await this.reportSchedulerCrash(error, 'initial_run');
+      try {
+        await this.reportSchedulerCrash(error, 'initial_run');
+      } catch (reportErr) {
+        console.error('[SCHEDULER] Failed to report initial run crash:', reportErr);
+      }
     });
   }
 }
