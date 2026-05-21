@@ -7,7 +7,7 @@ interface SMSParams {
 type SmsProviderResponse = {
   code?: string;
   message?: string;
-  message_id?: string;
+  message_id?: string | number;
   [key: string]: unknown;
 };
 
@@ -92,7 +92,7 @@ export class SMSService {
         console.log(`✅ SMS accepted by provider for ${phone}: ${data.message_id || 'no-id'}`);
         return {
           success: true,
-          messageId: data.message_id,
+          messageId: data.message_id != null ? String(data.message_id) : undefined,
         };
       }
 

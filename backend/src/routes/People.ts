@@ -678,7 +678,7 @@ export function registerPeopleRoutes(app: Express) {
         const smsResult = await smsService.send({
           to: person.phone,
           message: smsContent,
-          senderId: org.senderId || "MomentOS",
+          senderId: org.senderId || "Moment OS",
         });
         const mockedNotice = smsResult.mocked
           ? "SMS test mode is enabled. Message was mocked and not delivered."
