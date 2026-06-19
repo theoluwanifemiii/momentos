@@ -13,6 +13,7 @@ import {
   resolveFromEmail,
 } from "../serverContext";
 import { EmailService } from "../services/emailService";
+import posthog from "../lib/posthog";
 
 const FEEDBACK_TO_EMAIL =
   process.env.FEEDBACK_TO_EMAIL || WAITLIST_REPLY_TO || "founder@usemomentos.xyz";
@@ -137,6 +138,20 @@ export function registerFeedbackRoutes(app: Express) {
       } else {
         emailNotificationError =
           "Feedback email config invalid: sender or recipient is not configured.";
+      }
+
+      if (req.userId) {
+        posthog.capture({
+          distinctId: req.userId,
+          event: "feedback_submitted",
+          properties: {
+            feedback_id: feedback.id,
+            type: data.type,
+            has_subject: Boolean(data.subject),
+            page_path: data.pagePath || null,
+            organization_id: req.organizationId,
+          },
+        });
       }
 
       return res.status(201).json({

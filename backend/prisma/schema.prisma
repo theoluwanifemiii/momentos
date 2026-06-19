@@ -93,6 +93,7 @@ model Person {
   firstName       String?
   email           String
   birthday        DateTime
+  workStartDate   DateTime?
   department      String?
   role            String?
   optedOut        Boolean           @default(false)
@@ -156,14 +157,15 @@ model DeliveryLog {
 }
 
 model OrganizationTemplate {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   organizationId String
   templateId     String
-  isDefault      Boolean      @default(false)
-  isActive       Boolean      @default(true)
-  assignedAt     DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  template       Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  isDefault      Boolean         @default(false)
+  isActive       Boolean         @default(true)
+  categoryTag    MomentCategory?
+  assignedAt     DateTime        @default(now())
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template       Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, templateId])
   @@map("organization_templates")

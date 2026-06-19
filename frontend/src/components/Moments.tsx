@@ -42,6 +42,8 @@ type MomentRecord = {
   deliveryChannels: ('email' | 'sms' | 'whatsapp')[];
   status: 'ACTIVE' | 'PAUSED';
   scope?: 'BROADCAST' | 'PERSONAL';
+  ownerType?: string;
+  template?: { id: string; name: string; subject?: string } | null;
   recipients: PersonOption[];
 };
 
@@ -50,6 +52,18 @@ type CreateBroadcastMomentForm = {
   category: string;
   personIds: string[];
   recurrenceRule: 'ANNUAL' | 'DAILY' | 'MONTHLY' | 'QUARTERLY' | 'BI_YEARLY' | 'CUSTOM';
+  customIntervalDays: string;
+  randomizeMessage: boolean;
+  deliveryChannels: ('email' | 'sms' | 'whatsapp')[];
+  templateId: string;
+  eventDate: string;
+};
+
+type EditMomentForm = {
+  title: string;
+  category: string;
+  personIds: string[];
+  recurrenceRule: RecurrenceRule;
   customIntervalDays: string;
   randomizeMessage: boolean;
   deliveryChannels: ('email' | 'sms' | 'whatsapp')[];
@@ -73,6 +87,16 @@ const categoryFallback: MomentCategory[] = [
 ];
 
 const recurrenceOptions: Array<{ value: CreateBroadcastMomentForm['recurrenceRule']; label: string }> = [
+  { value: 'ANNUAL', label: 'Yearly' },
+  { value: 'DAILY', label: 'Daily' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'BI_YEARLY', label: 'Bi-yearly' },
+  { value: 'CUSTOM', label: 'Custom (interval)' },
+];
+
+const allRecurrenceOptions: Array<{ value: RecurrenceRule; label: string }> = [
+  { value: 'ONE_TIME', label: 'One-time' },
   { value: 'ANNUAL', label: 'Yearly' },
   { value: 'DAILY', label: 'Daily' },
   { value: 'MONTHLY', label: 'Monthly' },
@@ -109,6 +133,14 @@ const formatCategory = (value: string) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
+const toDateInput = (iso: string) => {
+  try {
+    return new Date(iso).toISOString().slice(0, 10);
+  } catch {
+    return '';
+  }
+};
+
 export default function Moments({ api, onOpenPeople }: MomentsProps) {
   const [categories, setCategories] = useState<MomentCategory[]>(categoryFallback);
   const [people, setPeople] = useState<PersonOption[]>([]);
@@ -116,12 +148,28 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
   const [moments, setMoments] = useState<MomentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [form, setForm] = useState<CreateBroadcastMomentForm>(initialForm);
+
+  // View/edit modal
+  const [viewMoment, setViewMoment] = useState<MomentRecord | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<EditMomentForm>({
+    title: '',
+    category: 'BIRTHDAY',
+    personIds: [],
+    recurrenceRule: 'MONTHLY',
+    customIntervalDays: '',
+    randomizeMessage: false,
+    deliveryChannels: ['email'],
+    templateId: '',
+    eventDate: '',
+  });
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === form.templateId) || null,
@@ -137,6 +185,15 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
     [moments]
   );
 
+  const broadcastCount = useMemo(
+    () => moments.filter((m) => m.scope === 'BROADCAST' || m.ownerType === 'ORGANIZATION').length,
+    [moments]
+  );
+  const personalCount = useMemo(
+    () => moments.filter((m) => m.scope === 'PERSONAL' || m.ownerType === 'USER').length,
+    [moments]
+  );
+
   const loadData = async () => {
     setLoading(true);
     setError('');
@@ -145,7 +202,7 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
         api.call('/moments/categories'),
         api.call('/people'),
         api.call('/templates'),
-        api.call('/moments?scope=BROADCAST'),
+        api.call('/moments?scope=ALL'),
       ]);
 
       setCategories(categoryData?.categories || categoryFallback);
@@ -168,6 +225,89 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
       setForm((prev) => ({ ...prev, templateId: templates[0].id }));
     }
   }, [templates, form.templateId]);
+
+  const openViewModal = (moment: MomentRecord) => {
+    setViewMoment(moment);
+    setEditMode(false);
+    setEditForm({
+      title: moment.title,
+      category: moment.category,
+      personIds: moment.recipients.map((r) => r.id),
+      recurrenceRule: moment.recurrenceRule,
+      customIntervalDays: moment.customIntervalDays ? String(moment.customIntervalDays) : '',
+      randomizeMessage: moment.randomizeMessage ?? false,
+      deliveryChannels: moment.deliveryChannels,
+      templateId: moment.template?.id || templates[0]?.id || '',
+      eventDate: toDateInput(moment.eventDate),
+    });
+  };
+
+  const closeViewModal = () => {
+    setViewMoment(null);
+    setEditMode(false);
+  };
+
+  const toggleEditPerson = (personId: string) => {
+    setEditForm((prev) => {
+      const exists = prev.personIds.includes(personId);
+      return {
+        ...prev,
+        personIds: exists
+          ? prev.personIds.filter((id) => id !== personId)
+          : [...prev.personIds, personId],
+      };
+    });
+  };
+
+  const toggleEditChannel = (channel: 'email' | 'sms' | 'whatsapp') => {
+    setEditForm((prev) => {
+      const exists = prev.deliveryChannels.includes(channel);
+      if (exists && prev.deliveryChannels.length === 1) return prev;
+      return {
+        ...prev,
+        deliveryChannels: exists
+          ? prev.deliveryChannels.filter((c) => c !== channel)
+          : [...prev.deliveryChannels, channel],
+      };
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!viewMoment) return;
+    if (!editForm.title.trim()) { setError('Title is required.'); return; }
+    if (editForm.personIds.length === 0) { setError('Select at least one recipient.'); return; }
+    if (!editForm.eventDate) { setError('Event date is required.'); return; }
+
+    setEditSaving(true);
+    setError('');
+    try {
+      await api.call(`/moments/${viewMoment.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          title: editForm.title.trim(),
+          category: editForm.category,
+          personIds: editForm.personIds,
+          recurrenceRule: editForm.recurrenceRule,
+          customIntervalDays:
+            editForm.recurrenceRule === 'CUSTOM' ? Number(editForm.customIntervalDays) : null,
+          randomizeMessage: editForm.randomizeMessage,
+          deliveryChannels: editForm.deliveryChannels,
+          templateId: editForm.templateId || null,
+          eventDate: editForm.eventDate,
+        }),
+      });
+      setSuccess('Moment updated.');
+      setEditMode(false);
+      await loadData();
+      // Update viewMoment with new data
+      const fresh = await api.call(`/moments/${viewMoment.id}`).catch(() => null);
+      if (fresh?.moment) setViewMoment(fresh.moment);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update moment.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const togglePerson = (personId: string) => {
     setForm((prev) => {
@@ -328,11 +468,15 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
         method: 'DELETE',
       });
       setSuccess('Moment deleted.');
+      if (viewMoment?.id === moment.id) closeViewModal();
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to delete moment.');
     }
   };
+
+  const isBroadcast = (m: MomentRecord) =>
+    m.scope === 'BROADCAST' || m.ownerType === 'ORGANIZATION';
 
   return (
     <div className="space-y-6">
@@ -342,18 +486,23 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
       <Card>
         <CardHeader className="flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <h2 className="text-xl font-bold">Broadcast Moments</h2>
+            <h2 className="text-xl font-bold">Moments</h2>
             <p className="text-sm text-slate-600">
-              Create moments for groups from one place. Personal moments now live inside each person profile.
+              Broadcast moments go to groups. Personal moments are tied to individual people.
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="rounded-full bg-slate-100 px-3 py-1">
-                {moments.length} broadcast moments
+                {moments.length} total
               </span>
               <span className="rounded-full bg-green-100 px-3 py-1 text-green-700">
                 {activeMomentsCount} active
               </span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">Type: Broadcast</span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                {broadcastCount} broadcast
+              </span>
+              <span className="rounded-full bg-purple-50 px-3 py-1 text-purple-700">
+                {personalCount} personal
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -551,7 +700,7 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
           <CardBody className="text-sm text-slate-600">Loading moments...</CardBody>
         ) : moments.length === 0 ? (
           <CardBody className="text-sm text-slate-600">
-            No broadcast moments yet. Create one from this dashboard.
+            No moments yet. Create a broadcast moment above, or add personal moments from a person's profile.
           </CardBody>
         ) : (
           <div className="ds-table-wrap">
@@ -573,12 +722,23 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
                   <tr key={moment.id} className="border-b border-slate-100">
                     <td className="ds-td font-medium text-slate-900">
                       <div className="flex items-center gap-2">
-                        <span>{moment.title}</span>
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                          Broadcast
-                        </span>
+                        <button
+                          onClick={() => openViewModal(moment)}
+                          className="text-left hover:text-blue-600 hover:underline transition-colors"
+                        >
+                          {moment.title}
+                        </button>
+                        {isBroadcast(moment) ? (
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                            Broadcast
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+                            Personal
+                          </span>
+                        )}
                         {moment.randomizeMessage ? (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                             Randomized
                           </span>
                         ) : null}
@@ -594,9 +754,22 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
                     </td>
                     <td className="ds-td text-slate-600">{moment.recipients.length}</td>
                     <td className="ds-td text-slate-600">{moment.deliveryChannels.join(', ')}</td>
-                    <td className="ds-td text-slate-600">{moment.status}</td>
+                    <td className="ds-td text-slate-600">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          moment.status === 'ACTIVE'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {moment.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                      </span>
+                    </td>
                     <td className="ds-td">
                       <div className="flex items-center gap-2">
+                        <Button onClick={() => openViewModal(moment)} variant="secondary" size="sm">
+                          View
+                        </Button>
                         {moment.status === 'ACTIVE' ? (
                           <Button onClick={() => updateStatus(moment, 'PAUSED')} variant="secondary" size="sm">
                             Pause
@@ -618,6 +791,285 @@ export default function Moments({ api, onOpenPeople }: MomentsProps) {
           </div>
         )}
       </Card>
+
+      {/* View / Edit Modal */}
+      {viewMoment ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">{viewMoment.title}</h2>
+                  {isBroadcast(viewMoment) ? (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">Broadcast</span>
+                  ) : (
+                    <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">Personal</span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-500 mt-0.5">{formatCategory(viewMoment.category)}</p>
+              </div>
+              <button
+                onClick={closeViewModal}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              {editMode && isBroadcast(viewMoment) ? (
+                /* Edit form */
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="ds-label">Title</label>
+                      <Input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="ds-label">Category</label>
+                      <Select
+                        value={editForm.category}
+                        onChange={(e) => setEditForm((p) => ({ ...p, category: e.target.value }))}
+                        className="mt-1"
+                      >
+                        {categories.map((c) => (
+                          <option key={c.key} value={c.key}>{c.label}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="ds-label">Event date</label>
+                      <Input
+                        type="date"
+                        value={editForm.eventDate}
+                        onChange={(e) => setEditForm((p) => ({ ...p, eventDate: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="ds-label">Recurrence</label>
+                      <Select
+                        value={editForm.recurrenceRule}
+                        onChange={(e) =>
+                          setEditForm((p) => ({ ...p, recurrenceRule: e.target.value as RecurrenceRule }))
+                        }
+                        className="mt-1"
+                      >
+                        {allRecurrenceOptions.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    {editForm.recurrenceRule === 'CUSTOM' && (
+                      <div>
+                        <label className="ds-label">Custom interval (days)</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={editForm.customIntervalDays}
+                          onChange={(e) => setEditForm((p) => ({ ...p, customIntervalDays: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="ds-label">Template</label>
+                      <Select
+                        value={editForm.templateId}
+                        onChange={(e) => setEditForm((p) => ({ ...p, templateId: e.target.value }))}
+                        className="mt-1"
+                      >
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="ds-label mb-2 block">
+                      Recipients ({editForm.personIds.length} selected)
+                    </label>
+                    <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
+                      {people.map((person) => (
+                        <label
+                          key={person.id}
+                          className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
+                        >
+                          <span>
+                            {person.fullName}
+                            <span className="ml-2 text-slate-400">{person.email}</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={editForm.personIds.includes(person.id)}
+                            onChange={() => toggleEditPerson(person.id)}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="ds-label mb-2 block">Channels</label>
+                    <div className="flex gap-4 rounded-lg border border-slate-200 p-3 text-sm">
+                      {(['email', 'sms', 'whatsapp'] as const).map((ch) => (
+                        <label key={ch} className="inline-flex items-center gap-2 capitalize">
+                          <input
+                            type="checkbox"
+                            checked={editForm.deliveryChannels.includes(ch)}
+                            onChange={() => toggleEditChannel(ch)}
+                          />
+                          {ch}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editForm.randomizeMessage}
+                      onChange={(e) => setEditForm((p) => ({ ...p, randomizeMessage: e.target.checked }))}
+                    />
+                    Randomize message for recurring sends
+                  </label>
+
+                  <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                    <Button onClick={() => setEditMode(false)} variant="secondary" disabled={editSaving}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveEdit} disabled={editSaving}>
+                      {editSaving ? 'Saving...' : 'Save changes'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Read-only view */
+                <div className="space-y-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Event date</p>
+                      <p className="mt-1 text-sm text-slate-800">
+                        {new Date(viewMoment.eventDate).toLocaleDateString('en-US', {
+                          year: 'numeric', month: 'long', day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Recurrence</p>
+                      <p className="mt-1 text-sm text-slate-800">
+                        {recurrenceLabel[viewMoment.recurrenceRule] || viewMoment.recurrenceRule}
+                        {viewMoment.recurrenceRule === 'CUSTOM' && viewMoment.customIntervalDays
+                          ? ` (every ${viewMoment.customIntervalDays} days)`
+                          : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Channels</p>
+                      <p className="mt-1 text-sm text-slate-800 capitalize">
+                        {viewMoment.deliveryChannels.join(', ')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</p>
+                      <p className="mt-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            viewMoment.status === 'ACTIVE'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {viewMoment.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                        </span>
+                      </p>
+                    </div>
+                    {viewMoment.template && (
+                      <div className="sm:col-span-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Template</p>
+                        <p className="mt-1 text-sm text-slate-800">{viewMoment.template.name}</p>
+                        {viewMoment.template.subject && (
+                          <p className="text-xs text-slate-500 mt-0.5">Subject: {viewMoment.template.subject}</p>
+                        )}
+                      </div>
+                    )}
+                    {viewMoment.randomizeMessage && (
+                      <div className="sm:col-span-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                          Message randomized on recurring sends
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-2">
+                      Recipients ({viewMoment.recipients.length})
+                    </p>
+                    {viewMoment.recipients.length === 0 ? (
+                      <p className="text-sm text-slate-500">No recipients</p>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                        {viewMoment.recipients.map((r) => (
+                          <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+                              {r.fullName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-800">{r.fullName}</p>
+                              <p className="text-xs text-slate-500">{r.email}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div className="flex gap-2">
+                      {viewMoment.status === 'ACTIVE' ? (
+                        <Button
+                          onClick={() => { updateStatus(viewMoment, 'PAUSED'); closeViewModal(); }}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Pause
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => { updateStatus(viewMoment, 'ACTIVE'); closeViewModal(); }}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Resume
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => deleteMoment(viewMoment)}
+                        variant="danger"
+                        size="sm"
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                    {isBroadcast(viewMoment) && (
+                      <Button onClick={() => setEditMode(true)}>
+                        Edit moment
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

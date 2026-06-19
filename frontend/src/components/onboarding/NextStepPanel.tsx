@@ -20,31 +20,7 @@ export default function NextStepPanel({ onboarding, onSelectTab, message }: Next
   }
 
   if (onboarding.progress.completed >= onboarding.progress.total) {
-    return (
-      <div className="bg-white border border-green-100 rounded-lg p-4 shadow-sm space-y-3">
-        <p className="text-xs font-semibold uppercase text-green-600">You’re all set</p>
-        <h3 className="text-lg font-semibold text-gray-900">Onboarding complete</h3>
-        <p className="text-sm text-gray-600">
-          Your automation is active. We’ll handle future birthdays automatically.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {onboarding.hasFirstSend && (
-            <button
-              onClick={() => onSelectTab?.('upcoming')}
-              className="text-sm text-green-700 underline"
-            >
-              View upcoming birthdays
-            </button>
-          )}
-          <button
-            onClick={() => onSelectTab?.('people')}
-            className="text-sm text-green-700 underline"
-          >
-            Add more people
-          </button>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const currentStep = onboarding.steps.find(

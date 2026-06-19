@@ -1,10 +1,11 @@
 import "dotenv/config";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
 import { ADMIN_CSRF_COOKIE } from "./serverContext";
+import posthog from "./lib/posthog";
 import {
   buildAllowedOrigins,
   createAdminCsrfProtection,
@@ -98,5 +99,11 @@ registerAdminDashboardRoutes(app);
 registerAiRoutes(app);
 registerWebhookRoutes(app);
 registerFeedbackRoutes(app);
+
+// Global error handler — captures unhandled errors to PostHog
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  posthog.captureException(err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 export default app;

@@ -171,6 +171,90 @@
               "path": ["auth", "password", "reset"]
             }
           }
+        },
+        {
+          "name": "Magic Link - Request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"mode\": \"LOGIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/magic/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "magic", "request"]
+            }
+          }
+        },
+        {
+          "name": "Magic Link - Request (Register)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"mode\": \"REGISTER\",\n  \"accountType\": \"ORGANIZATION\",\n  \"organizationName\": \"My Org\",\n  \"timezone\": \"UTC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/magic/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "magic", "request"]
+            }
+          }
+        },
+        {
+          "name": "Magic Link - Verify",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"MAGIC_LINK_TOKEN_HERE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/magic/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "magic", "verify"]
+            }
+          }
+        },
+        {
+          "name": "Join Waitlist",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"name\": \"Jane Doe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/waitlist",
+              "host": ["{{baseUrl}}"],
+              "path": ["waitlist"]
+            }
+          }
         }
       ]
     },
@@ -343,6 +427,24 @@
           }
         },
         {
+          "name": "Get Person",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/people/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "PERSON_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Send Birthday Email",
           "request": {
             "method": "POST",
@@ -351,6 +453,33 @@
               "raw": "{{baseUrl}}/people/:id/send-birthday",
               "host": ["{{baseUrl}}"],
               "path": ["people", ":id", "send-birthday"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "PERSON_ID_HERE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send SMS Now",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Happy Birthday! Wishing you a wonderful day.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/people/:id/send-sms",
+              "host": ["{{baseUrl}}"],
+              "path": ["people", ":id", "send-sms"],
               "variable": [
                 {
                   "key": "id",
@@ -717,6 +846,39 @@
           }
         },
         {
+          "name": "Test SMS",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+2348012345678\",\n  \"message\": \"Test message from MomentOS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/test-sms",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "test-sms"]
+            }
+          }
+        },
+        {
+          "name": "Get SMS Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/sms-balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "sms-balance"]
+            }
+          }
+        },
+        {
           "name": "Retry Failed Delivery",
           "request": {
             "method": "POST",
@@ -731,6 +893,195 @@
                   "value": "LOG_ID_HERE"
                 }
               ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Moments",
+      "item": [
+        {
+          "name": "List Moment Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/moments/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", "categories"]
+            }
+          }
+        },
+        {
+          "name": "List Moments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/moments?scope=BROADCAST",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments"],
+              "query": [
+                { "key": "scope", "value": "BROADCAST" },
+                { "key": "status", "value": "ACTIVE", "disabled": true },
+                { "key": "category", "value": "BIRTHDAY", "disabled": true },
+                { "key": "personId", "value": "PERSON_ID_HERE", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Moment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/moments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", ":id"],
+              "variable": [{ "key": "id", "value": "MOMENT_ID_HERE" }]
+            }
+          }
+        },
+        {
+          "name": "Create Moment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Team Birthday\",\n  \"category\": \"BIRTHDAY\",\n  \"personIds\": [\"PERSON_ID_HERE\"],\n  \"eventDate\": \"2026-05-23\",\n  \"recurrenceRule\": \"ANNUAL\",\n  \"deliveryChannels\": [\"email\"],\n  \"randomizeMessage\": false,\n  \"status\": \"ACTIVE\",\n  \"scope\": \"BROADCAST\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/moments",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments"]
+            }
+          }
+        },
+        {
+          "name": "Update Moment",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/moments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", ":id"],
+              "variable": [{ "key": "id", "value": "MOMENT_ID_HERE" }]
+            }
+          }
+        },
+        {
+          "name": "Update Moment Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PAUSED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/moments/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", ":id", "status"],
+              "variable": [{ "key": "id", "value": "MOMENT_ID_HERE" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Moment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/moments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", ":id"],
+              "variable": [{ "key": "id", "value": "MOMENT_ID_HERE" }]
+            }
+          }
+        },
+        {
+          "name": "List Personal Moments (by Person)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/moments/personal/:personId",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", "personal", ":personId"],
+              "variable": [{ "key": "personId", "value": "PERSON_ID_HERE" }]
+            }
+          }
+        },
+        {
+          "name": "Create Personal Moment (by Person)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Work Anniversary\",\n  \"category\": \"ANNIVERSARY\",\n  \"eventDate\": \"2026-03-01\",\n  \"recurrenceRule\": \"ANNUAL\",\n  \"deliveryChannels\": [\"email\"],\n  \"randomizeMessage\": false,\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/moments/personal/:personId",
+              "host": ["{{baseUrl}}"],
+              "path": ["moments", "personal", ":personId"],
+              "variable": [{ "key": "personId", "value": "PERSON_ID_HERE" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feedback",
+      "item": [
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BUG_REPORT\",\n  \"subject\": \"Something is broken\",\n  \"message\": \"When I click the button nothing happens after saving.\",\n  \"pagePath\": \"/moments\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["feedback"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Generate Template Draft",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Write a warm birthday message for a team member who just turned 30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/template-draft",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "template-draft"]
             }
           }
         }

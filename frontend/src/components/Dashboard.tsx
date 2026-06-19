@@ -5,7 +5,7 @@ import FeedbackWidget from './feedback/FeedbackWidget';
 
 const CSVUpload = lazy(() => import('./people/CSVUpload.tsx'));
 const PeopleList = lazy(() => import('./people/PeopleList.tsx'));
-const UpcomingBirthdays = lazy(() => import('./people/UpcomingBirthdays.tsx'));
+const UpcomingCelebrations = lazy(() => import('./people/UpcomingCelebrations.tsx'));
 const Templates = lazy(() => import('./Templates.tsx'));
 const Settings = lazy(() => import('./Settings.tsx'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard.tsx'));
@@ -39,7 +39,6 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
   }, []);
 
   const hasFirstSend = onboarding?.hasFirstSend ?? false;
-  const hasTestSend = onboarding?.completedSteps?.includes('send_test_email') ?? false;
 
   useEffect(() => {
     if (!hasFirstSend && activeTab === 'upcoming') {
@@ -72,7 +71,7 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'upload', label: 'Upload People' },
     { id: 'people', label: 'All People' },
-    { id: 'upcoming', label: 'Upcoming Birthdays', hidden: !hasFirstSend },
+    { id: 'upcoming', label: 'Upcoming Celebrations', hidden: !hasFirstSend },
     { id: 'templates', label: 'Email Templates' },
     { id: 'moments', label: 'Moments' },
     { id: 'settings', label: 'Settings' },
@@ -83,9 +82,11 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white">
-              MO
-            </div>
+            <svg className="h-8 w-8 flex-shrink-0" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="MomentOS">
+              <rect width="120" height="120" rx="28" fill="#0f172a"/>
+              <circle cx="60" cy="72" r="24" fill="none" stroke="white" strokeWidth="9"/>
+              <circle cx="60" cy="30" r="7.5" fill="#2563eb"/>
+            </svg>
             <div>
               <h1 className="text-lg font-bold text-slate-900">MomentOS</h1>
               <p className="text-xs text-slate-500">Celebration automation workspace</p>
@@ -140,7 +141,7 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
         {activeTab === 'people' && (
           <Suspense fallback={renderFallback('people')}>
             <PeopleList
-              allowManualSend={hasFirstSend || hasTestSend}
+              allowManualSend={true}
               onboarding={onboarding}
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
@@ -148,8 +149,8 @@ export default function Dashboard({ onLogout, api }: DashboardProps) {
           </Suspense>
         )}
         {activeTab === 'upcoming' && (
-          <Suspense fallback={renderFallback('upcoming birthdays')}>
-            <UpcomingBirthdays />
+          <Suspense fallback={renderFallback('upcoming celebrations')}>
+            <UpcomingCelebrations />
           </Suspense>
         )}
         {activeTab === 'templates' && (

@@ -211,14 +211,11 @@ const landingMarkup = `
   <nav class="fixed top-0 left-0 right-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md" data-reveal>
     <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
-            <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path>
-            <path d="M20 2v4"></path>
-            <path d="M22 4h-4"></path>
-            <circle cx="4" cy="20" r="2"></circle>
-          </svg>
-        </div>
+        <svg class="w-8 h-8 flex-shrink-0" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="MomentOS">
+          <rect width="120" height="120" rx="28" fill="#0f172a"/>
+          <circle cx="60" cy="72" r="24" fill="none" stroke="white" stroke-width="9"/>
+          <circle cx="60" cy="30" r="7.5" fill="#2563eb"/>
+        </svg>
         <span class="text-lg font-semibold tracking-tight text-slate-900">MomentOS</span>
       </div>
       <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
@@ -238,112 +235,160 @@ const landingMarkup = `
     </div>
   </nav>
 
-  <header class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-    <div class="absolute inset-0 bg-grid -z-10 [mask-image:linear-gradient(to_bottom,white,transparent)]"></div>
+  <header class="relative pt-32 pb-20 lg:pt-44 lg:pb-28 overflow-hidden bg-[#f8f9fb]">
     <div class="max-w-7xl mx-auto px-6 relative z-10">
-      <div class="grid lg:grid-cols-2 gap-16 items-center">
-        <div class="max-w-2xl reveal" data-reveal data-reveal-direction="left">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium mb-8">
+      <div class="grid lg:grid-cols-[1fr_1.15fr] gap-12 items-center">
+
+        <!-- Left: Text -->
+        <div class="max-w-xl reveal" data-reveal data-reveal-direction="left">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-medium mb-8 shadow-sm">
             <span class="relative flex h-2 w-2">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
               <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
             </span>
             New: SMS + WhatsApp support
           </div>
-          <h1 class="text-5xl sm:text-7xl font-semibold text-slate-900 tracking-tight leading-[1.1] mb-8">
-            Never Miss a <br>
+          <h1 class="text-[3.25rem] sm:text-[4.25rem] lg:text-[4.75rem] font-bold text-slate-900 tracking-tight leading-[1.05] mb-6">
+            Never Miss a<br>
             <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Celebration Again</span>
           </h1>
-          <p class="text-xl text-slate-600 leading-relaxed mb-6 font-normal">
-            Make presence felt, automatically.
-          </p>
-          <p class="text-lg text-slate-500 mb-10 leading-relaxed max-w-lg">
-            MomentOS sends thoughtful celebration messages across Email, SMS, and WhatsApp so no one in your circle ever feels forgotten.
+          <p class="text-lg text-slate-600 leading-relaxed mb-10 max-w-lg">
+            MomentOS sends thoughtful celebration messages across Email, SMS, and WhatsApp — so no one in your circle ever feels forgotten.
           </p>
           <div class="flex flex-col sm:flex-row gap-4">
-            <a href="#" data-action="open-waitlist" class="inline-flex justify-center items-center px-8 py-3.5 text-base font-medium rounded-full text-white bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5">
-              Join waitlist
+            <a href="#" data-action="open-waitlist" class="inline-flex justify-center items-center px-8 py-3.5 text-base font-semibold rounded-full text-white bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-900/15 transition-all hover:-translate-y-0.5">
+              Join Waitlist — It's Free
             </a>
-            <a href="#how-it-works" class="inline-flex justify-center items-center px-8 py-3.5 text-base font-medium rounded-full text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all">
-              See How It Works
+            <a href="https://calendar.app.google/jJpD732TzNt74Axd9" target="_blank" rel="noopener noreferrer" class="inline-flex justify-center items-center px-8 py-3.5 text-base font-semibold rounded-full text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+              Book a Demo
             </a>
           </div>
-          <div class="mt-8 flex items-center gap-4 text-sm text-slate-500">
-            <p>Upload once. Celebrate forever.</p>
+          <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-500">
+            <div class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              Upload once. Celebrate forever.
+            </div>
+            <div class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              No credit card required
+            </div>
           </div>
         </div>
 
-        <div class="relative h-[600px] hidden lg:block select-none pointer-events-none reveal" data-reveal data-reveal-direction="right">
-          <div class="absolute top-0 right-[-20%] w-[130%] h-full bg-gradient-to-bl from-indigo-600 via-blue-700 to-violet-900 rounded-l-[3rem] transform -skew-y-6 translate-y-12 shadow-2xl">
-            <div class="absolute top-20 left-20 w-full h-full opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+        <!-- Right: Maxima-style visual -->
+        <div class="relative h-[580px] hidden lg:block select-none pointer-events-none reveal" data-reveal data-reveal-direction="right">
+
+          <!-- Angled indigo panel (bleeds off right edge like Maxima) -->
+          <div class="absolute top-[-18%] right-[-6%] bottom-[-18%] w-[72%] rounded-l-[2.5rem] overflow-hidden shadow-2xl">
+            <div class="absolute inset-0 bg-gradient-to-br from-indigo-500 via-indigo-700 to-violet-900"></div>
+            <div class="absolute top-[-10%] left-[-5%] w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-[-10%] right-[-5%] w-56 h-56 bg-violet-400/25 rounded-full blur-2xl"></div>
+            <div class="absolute inset-0 opacity-[0.07]" style="background-image: linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px); background-size: 36px 36px;"></div>
           </div>
 
-          <div class="absolute inset-0 flex items-center justify-center transform translate-x-12 translate-y-8">
-            <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 w-[420px] transform -rotate-2 hover:rotate-0 transition-transform duration-700">
-              <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
-                      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"></path>
-                      <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-                    </svg>
-                  </div>
-                  <div>
-                    <div class="text-sm font-semibold text-slate-900">Sarah from Marketing</div>
-                    <div class="text-xs text-slate-500">Scheduled: Today, 9:00 AM</div>
-                  </div>
-                </div>
-                <span class="px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs font-medium">Ready</span>
-              </div>
-              <div class="space-y-3">
-                <div class="h-2 bg-slate-100 rounded w-3/4"></div>
-                <div class="h-2 bg-slate-100 rounded w-full"></div>
-                <div class="h-2 bg-slate-100 rounded w-5/6"></div>
-              </div>
-              <div class="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                <span class="text-xs text-slate-400">Template: Modern Fun</span>
-                <span class="text-xs font-medium text-indigo-600">Edit</span>
-              </div>
-            </div>
+          <!-- Floating integration icons (in the gap between text and panel) -->
+          <div class="absolute left-[2%] top-[14%] w-14 h-14 bg-white rounded-2xl shadow-xl border border-slate-100/80 flex items-center justify-center" style="transform:rotate(-7deg)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"></path><rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            </svg>
+          </div>
+          <div class="absolute left-[14%] top-[26%] w-11 h-11 bg-violet-100 rounded-2xl shadow-lg border border-violet-200/60 flex items-center justify-center" style="transform:rotate(5deg)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path>
+            </svg>
+          </div>
+          <div class="absolute left-[3%] top-[44%] w-12 h-12 bg-emerald-500 rounded-2xl shadow-xl border border-emerald-400 flex items-center justify-center" style="transform:rotate(-4deg)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="absolute left-[16%] top-[63%] w-10 h-10 bg-white rounded-xl shadow-lg border border-slate-100 flex items-center justify-center" style="transform:rotate(6deg)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+          </div>
 
-            <div class="absolute -right-12 top-24 bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-white/50 p-4 w-[280px] transform rotate-6 z-[-1]">
-              <div class="flex items-center gap-3 mb-3">
-                <div class="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-violet-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
-                    <path d="M8 2v4"></path>
-                    <path d="M16 2v4"></path>
-                    <rect width="18" height="18" x="3" y="4" rx="2"></rect>
-                    <path d="M3 10h18"></path>
-                  </svg>
+          <!-- Main product card -->
+          <div class="absolute top-[6%] right-[4%] w-[340px] bg-white rounded-2xl shadow-2xl border border-slate-100/50 p-5 z-10">
+            <div class="flex items-center gap-2 mb-4">
+              <div class="w-2 h-2 rounded-full bg-red-400"></div>
+              <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+              <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+              <div class="ml-2 px-2 py-0.5 rounded bg-slate-100 text-[10px] text-slate-400 font-mono">momentos.app</div>
+            </div>
+            <div class="space-y-3">
+              <div class="flex items-start gap-3 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                <div class="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 text-white text-sm font-bold">S</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-xs font-semibold text-slate-900">Sarah from Marketing</span>
+                    <span class="text-[10px] text-slate-400">9:00 AM</span>
+                  </div>
+                  <div class="h-1.5 bg-indigo-200/70 rounded-full w-full mb-1.5"></div>
+                  <div class="h-1.5 bg-indigo-200/70 rounded-full w-4/5"></div>
+                  <div class="mt-2 flex gap-1.5">
+                    <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-medium">Email</span>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium">SMS</span>
+                  </div>
                 </div>
-                <div class="text-sm font-medium text-slate-900">Upcoming Celebrations</div>
               </div>
-              <div class="space-y-2">
-                <div class="flex items-center justify-between text-xs p-2 rounded bg-slate-50">
-                  <span>Alex D.</span>
-                  <span class="text-slate-500">Tomorrow</span>
+              <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                 </div>
-                <div class="flex items-center justify-between text-xs p-2 rounded bg-slate-50">
-                  <span>Jordan P.</span>
-                  <span class="text-slate-500">in 3 days</span>
+                <div class="flex-1">
+                  <div class="text-xs font-semibold text-slate-700">Message delivered</div>
+                  <div class="text-[10px] text-slate-400">via Email + SMS · just now</div>
                 </div>
+                <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Sent</span>
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-xs text-slate-400">3 celebrations queued today</span>
+                <span class="text-xs font-semibold text-indigo-600 flex items-center gap-1">View all <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
               </div>
             </div>
+          </div>
 
-            <div class="absolute left-[-20px] bottom-32 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl transform rotate-3 flex items-center gap-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-green-400">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="m9 12 2 2 4-4"></path>
-              </svg>
-              <span class="text-sm font-medium">Automation Active</span>
+          <!-- Floating upcoming celebrations card -->
+          <div class="absolute right-[3%] top-[61%] w-[270px] bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-slate-100/60 p-4 z-10">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path>
+                </svg>
+              </div>
+              <span class="text-xs font-semibold text-slate-800">Upcoming Celebrations</span>
             </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-slate-50">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-[10px]">A</div>
+                  <span class="text-slate-700 font-medium">Alex D. — Birthday</span>
+                </div>
+                <span class="text-slate-400">Tomorrow</span>
+              </div>
+              <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-slate-50">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-rose-700 font-bold text-[10px]">J</div>
+                  <span class="text-slate-700 font-medium">Jordan P. — Work Anni.</span>
+                </div>
+                <span class="text-slate-400">in 3 days</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Automation active badge -->
+          <div class="absolute left-[20%] bottom-[18%] bg-slate-900 text-white px-3.5 py-2.5 rounded-xl shadow-xl flex items-center gap-2.5 z-10">
+            <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+            <span class="text-xs font-semibold">Automation Active</span>
           </div>
         </div>
       </div>
 
-      <div class="mt-20 lg:mt-32 pt-10 border-t border-slate-100">
-        <p class="text-center text-lg text-slate-500 mb-8 font-medium">Built for real teams. Designed for reliability, not noise.</p>
-        <div class="flex flex-wrap justify-center gap-x-12 gap-y-8 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
+      <!-- Customer logos strip -->
+      <div class="mt-20 lg:mt-24 pt-10 border-t border-slate-200/80">
+        <p class="text-center text-xs text-slate-400 mb-8 font-semibold uppercase tracking-widest">Trusted by people-first teams</p>
+        <div class="flex flex-wrap justify-center gap-x-12 gap-y-8 opacity-50 grayscale hover:grayscale-0 hover:opacity-70 transition-all duration-500">
           <div class="flex items-center gap-2 text-xl font-semibold text-slate-800">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
               <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4A2 2 0 0 0 13 20l7-4A2 2 0 0 0 21 16Z"></path>
@@ -1254,7 +1299,11 @@ const landingMarkup = `
       <div class="grid gap-10 md:grid-cols-[1.2fr_0.8fr_0.8fr_1.2fr]">
         <div class="space-y-4 reveal" data-reveal data-reveal-delay="120ms">
           <div class="flex items-center gap-2">
-            <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold">M</div>
+            <svg class="w-9 h-9 flex-shrink-0" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="MomentOS">
+              <rect width="120" height="120" rx="28" fill="#0f172a"/>
+              <circle cx="60" cy="72" r="24" fill="none" stroke="white" stroke-width="9"/>
+              <circle cx="60" cy="30" r="7.5" fill="#2563eb"/>
+            </svg>
             <div>
               <div class="text-sm font-semibold text-slate-900">MomentOS</div>
               <div class="text-xs text-slate-500">Moments that matter, automated.</div>

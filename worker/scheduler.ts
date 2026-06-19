@@ -924,8 +924,10 @@ From everyone at {{organization_name}}`,
     content: string;
     orgNow: DateTime;
     momentId?: string | null;
+    /** Short label for template slot {{3}}, e.g. "birthday", "3rd work anniversary" */
+    celebrationLabel?: string;
   }) {
-    const { person, org, template, subject, content, orgNow, momentId } = params;
+    const { person, org, template, subject, content, orgNow, momentId, celebrationLabel } = params;
 
     if (!org.whatsappEnabled || !person.phone) {
       return;
@@ -945,11 +947,12 @@ From everyone at {{organization_name}}`,
     }
 
     try {
-      const message = toPlainText(`${subject}\n\n${content}`, 1000);
+      const firstName = person.firstName || person.fullName.split(' ')[0] || person.fullName;
       const whatsappResult = await whatsappService.send({
         to: person.phone,
-        message,
-        from: org.senderId || process.env.TERMII_WHATSAPP_FROM || 'Moment OS',
+        firstName,
+        orgName: org.name,
+        celebrationLabel: celebrationLabel || subject,
       });
 
       await this.logDelivery({
@@ -1003,6 +1006,7 @@ From everyone at {{organization_name}}`,
     orgNow: DateTime
   ) {
     const templateAssignment =
+      templateAssignments.find((a) => (a as any).categoryTag === 'BIRTHDAY') ||
       templateAssignments.find((assignment) => assignment.isDefault) ||
       templateAssignments[0];
 
@@ -1077,6 +1081,71 @@ From everyone at {{organization_name}}`,
           content,
           orgNow,
           momentId: null,
+          celebrationLabel: 'birthday',
+        });
+      }
+    }
+  }
+
+  async sendAnniversaryMessage(
+    person: PersonRecord,
+    org: OrganizationDeliveryConfig,
+    templateAssignments: TemplateAssignmentWithTemplate[],
+    orgNow: DateTime
+  ) {
+    const templateAssignment =
+      templateAssignments.find((a) => (a as any).categoryTag === 'ANNIVERSARY') ||
+      templateAssignments.find((assignment) => assignment.isDefault) ||
+      templateAssignments[0];
+
+    if (!templateAssignment) {
+      console.error('No active template for anniversary send in org', org.id);
+      return;
+    }
+
+    const template = templateAssignment.template;
+    const workStartDate = (person as any).workStartDate as Date;
+    const yearsCompleted = orgNow.year - DateTime.fromJSDate(workStartDate).year;
+    const ordinal = (n: number) => {
+      const s = ['th', 'st', 'nd', 'rd'];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+
+    const variables = {
+      first_name: person.firstName || person.fullName.split(' ')[0],
+      full_name: person.fullName,
+      organization_name: org.name,
+      date: new Date().toLocaleDateString(),
+      years: String(yearsCompleted),
+      anniversary_label: ordinal(yearsCompleted),
+    };
+
+    const content = this.interpolateTemplate(template.content, variables);
+    const subject = this.interpolateTemplate(
+      template.subject || `Happy Work Anniversary, {{first_name}}!`,
+      variables
+    );
+
+    const channels = template.channels.length
+      ? template.channels
+      : [DeliveryChannel.email];
+
+    for (const channel of channels) {
+      if (channel === DeliveryChannel.email) {
+        await this.sendEmailChannel({ person, org, template, subject, content, orgNow, momentId: null });
+      } else if (channel === DeliveryChannel.sms) {
+        await this.sendSmsChannel({ person, org, template, content, orgNow, momentId: null });
+      } else if (channel === DeliveryChannel.whatsapp) {
+        await this.sendWhatsappChannel({
+          person,
+          org,
+          template,
+          subject,
+          content,
+          orgNow,
+          momentId: null,
+          celebrationLabel: `${variables.anniversary_label} work anniversary`,
         });
       }
     }
@@ -1139,6 +1208,7 @@ From everyone at {{organization_name}}`,
           content,
           orgNow,
           momentId: moment.id,
+          celebrationLabel: (moment.category || 'celebration').toLowerCase().replace(/_/g, ' '),
         });
       }
     }
@@ -1282,6 +1352,17 @@ From everyone at {{organization_name}}`,
 
     for (const person of todaysBirthdays) {
       await this.sendBirthdayMessage(person, org, templateAssignments, orgNow);
+    }
+
+    // Work anniversary sends
+    const todaysAnniversaries = (org.people as any[]).filter((person) => {
+      if (!person.workStartDate) return false;
+      return this.isBirthdayToday(person.workStartDate, org.timezone);
+    });
+    console.log(`Found ${todaysAnniversaries.length} work anniversaries for organization ${org.id}`);
+
+    for (const person of todaysAnniversaries) {
+      await this.sendAnniversaryMessage(person, org, templateAssignments, orgNow);
     }
 
     const defaultTemplate = (

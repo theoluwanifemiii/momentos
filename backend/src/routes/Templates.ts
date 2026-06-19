@@ -85,6 +85,7 @@ app.get(
           ...assignment.template,
           isDefault: assignment.isDefault,
           isActive: assignment.isActive,
+          categoryTag: (assignment as any).categoryTag ?? null,
         })),
       });
     } catch (err: any) {
@@ -342,16 +343,45 @@ app.put(
         };
       }
 
+      // categoryTag: only one template per category per org — clear others first
+      if (safeData.categoryTag !== undefined) {
+        await prisma.$transaction([
+          // Clear this tag from any other template in the org
+          ...(safeData.categoryTag !== null
+            ? [
+                prisma.organizationTemplate.updateMany({
+                  where: {
+                    organizationId: req.organizationId!,
+                    id: { not: updatedAssignment.id },
+                    categoryTag: safeData.categoryTag,
+                  },
+                  data: { categoryTag: null },
+                }),
+              ]
+            : []),
+          prisma.organizationTemplate.update({
+            where: { id: updatedAssignment.id },
+            data: { categoryTag: safeData.categoryTag ?? null },
+          }),
+        ]);
+      }
+
       const onboarding = await computeOnboardingState(
         prisma,
         req.organizationId!
       );
 
+      // Fetch the final assignment state to return accurate categoryTag
+      const finalAssignment = await prisma.organizationTemplate.findUnique({
+        where: { id: updatedAssignment.id },
+      });
+
       res.json({
         template: {
           ...updatedTemplate,
-          isDefault: updatedAssignment.isDefault,
-          isActive: updatedAssignment.isActive,
+          isDefault: finalAssignment?.isDefault ?? updatedAssignment.isDefault,
+          isActive: finalAssignment?.isActive ?? updatedAssignment.isActive,
+          categoryTag: finalAssignment?.categoryTag ?? null,
         },
         onboarding,
       });

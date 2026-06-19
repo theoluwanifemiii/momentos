@@ -32,10 +32,6 @@ export default function MomentOSApp() {
   const [pendingEmail, setPendingEmail] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setIsAuthenticated(false);
-  }, []);
-
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
@@ -93,6 +89,23 @@ export default function MomentOSApp() {
     const token = tokenFromQuery || tokenFromHash;
     const [verifying, setVerifying] = useState(Boolean(token));
     const [error, setError] = useState('');
+
+    useEffect(() => {
+      if (token || isAuthenticated) return;
+      const stored = localStorage.getItem('token');
+      if (!stored) return;
+      try {
+        const payload = JSON.parse(atob(stored.split('.')[1]));
+        if (payload.exp && payload.exp * 1000 > Date.now()) {
+          setUser({ id: payload.userId, role: payload.userRole });
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('token');
+        }
+      } catch {
+        localStorage.removeItem('token');
+      }
+    }, []);
 
     useEffect(() => {
       if (!token || isAuthenticated) return;

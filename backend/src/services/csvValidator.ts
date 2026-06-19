@@ -11,6 +11,7 @@ const PersonSchema = z.object({
   email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
   birthday: z.string().min(1, 'Birthday is required'),
+  work_start_date: z.string().optional(),
   first_name: z.string().optional(),
   department: z.string().optional(),
   role: z.string().optional(),
@@ -33,6 +34,7 @@ export interface ParsedPerson {
   email: string;
   phone?: string | null;
   birthday: Date;
+  workStartDate?: Date | null;
   department?: string;
   role?: string;
 }
@@ -157,9 +159,25 @@ export class CSVValidator {
         }
       }
 
+      // Parse work start date (optional)
+      let workStartDate: Date | null = null;
+      if (data.work_start_date) {
+        const wsdResult = this.parseBirthday(data.work_start_date);
+        if (!wsdResult.success) {
+          errors.push({
+            row: rowNum,
+            field: 'work_start_date',
+            message: `Invalid work start date: ${wsdResult.error}`,
+            data: record,
+          });
+          continue;
+        }
+        workStartDate = wsdResult.date;
+      }
+
       // Extract first name if not provided
       const firstName = data.first_name || this.extractFirstName(data.full_name);
-      
+
       // Valid row
       valid.push({
         fullName: data.full_name,
@@ -167,6 +185,7 @@ export class CSVValidator {
         email: emailLower,
         phone,
         birthday: birthdayResult.date,
+        workStartDate,
         department: data.department,
         role: data.role,
       });
@@ -233,7 +252,18 @@ export class CSVValidator {
       'date_of_birth': 'birthday',
       'dob': 'birthday',
       'birth date': 'birthday',
-      
+
+      'work_start_date': 'work_start_date',
+      'work start date': 'work_start_date',
+      'start_date': 'work_start_date',
+      'start date': 'work_start_date',
+      'hire_date': 'work_start_date',
+      'hire date': 'work_start_date',
+      'join_date': 'work_start_date',
+      'join date': 'work_start_date',
+      'anniversary': 'work_start_date',
+      'work anniversary': 'work_start_date',
+
       'first_name': 'first_name',
       'firstname': 'first_name',
       'first name': 'first_name',
@@ -329,6 +359,7 @@ export class CSVValidator {
       'email',
       'phone',
       'birthday',
+      'work_start_date',
       'first_name',
       'department',
       'role',
@@ -339,6 +370,7 @@ export class CSVValidator {
         'jane.doe@example.com',
         '+14155552671',
         '1990-05-23',
+        '2019-03-11',
         'Jane',
         'Engineering',
         'Software Engineer',
@@ -348,6 +380,7 @@ export class CSVValidator {
         'john.smith@example.com',
         '+447700900123',
         '1985-12-15',
+        '2021-07-01',
         'John',
         'Marketing',
         'Marketing Manager',
@@ -357,6 +390,7 @@ export class CSVValidator {
         'mary.j@example.com',
         '+2348012345678',
         '1992-03-08',
+        '',
         'Mary',
         'Sales',
         'Sales Representative',

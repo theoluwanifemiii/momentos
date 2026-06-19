@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/worker
+WORKDIR /app
 
 # Set Prisma binary targets for Railway/Debian
 ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-1.1.x

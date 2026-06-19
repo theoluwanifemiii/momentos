@@ -12,6 +12,7 @@ type PersonRecord = {
   email: string;
   phone?: string | null;
   birthday: string;
+  workStartDate?: string | null;
   department?: string | null;
   role?: string | null;
 };
@@ -333,6 +334,9 @@ export default function PersonProfileModal({ api, person, onClose }: PersonProfi
                   <div>Email: {person.email}</div>
                   <div>Phone: {person.phone || '—'}</div>
                   <div>Birthday: {new Date(person.birthday).toLocaleDateString()}</div>
+                  {person.workStartDate ? (
+                    <div>Work anniversary: {new Date(person.workStartDate).toLocaleDateString()}</div>
+                  ) : null}
                 </div>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">

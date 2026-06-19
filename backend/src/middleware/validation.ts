@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { z } from "zod";
-import { DeliveryChannel, TemplateType } from "@prisma/client";
+import { DeliveryChannel, MomentCategory, TemplateType } from "@prisma/client";
 
 // Person update schema - only allow safe fields
 export const PersonUpdateSchema = z
@@ -10,6 +10,7 @@ export const PersonUpdateSchema = z
     email: z.string().email().optional(),
     phone: z.string().nullable().optional(),
     birthday: z.coerce.date().optional(),
+    workStartDate: z.coerce.date().nullable().optional(),
     department: z.string().optional(),
     role: z.string().optional(),
     optedOut: z.boolean().optional(),
@@ -47,6 +48,7 @@ export const TemplateUpdateSchema = z
     channels: z.array(z.nativeEnum(DeliveryChannel)).min(1).optional(),
     isActive: z.boolean().optional(),
     isDefault: z.boolean().optional(),
+    categoryTag: z.nativeEnum(MomentCategory).nullable().optional(),
   })
   .strict();
 

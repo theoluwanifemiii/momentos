@@ -34,6 +34,7 @@ export default function PeopleList({
     email: '',
     phone: '',
     birthday: '',
+    workStartDate: '',
     department: '',
     role: '',
   });
@@ -52,6 +53,7 @@ export default function PeopleList({
     email: '',
     phone: '',
     birthday: '',
+    workStartDate: '',
     department: '',
     role: '',
   });
@@ -148,6 +150,7 @@ export default function PeopleList({
           email: form.email,
           phone: form.phone || undefined,
           birthday: form.birthday,
+          workStartDate: form.workStartDate || undefined,
           department: form.department || undefined,
           role: form.role || undefined,
         }),
@@ -169,6 +172,7 @@ export default function PeopleList({
         email: '',
         phone: '',
         birthday: '',
+        workStartDate: '',
         department: '',
         role: '',
       });
@@ -258,6 +262,7 @@ export default function PeopleList({
       ? fullName.slice(firstName.length).trim()
       : fullName.split(/\s+/).slice(1).join(' ');
     const birthdayDate = new Date(person.birthday);
+    const workStartDate = person.workStartDate ? new Date(person.workStartDate) : null;
 
     setEditingPersonId(person.id);
     setEditForm({
@@ -268,6 +273,9 @@ export default function PeopleList({
       birthday: Number.isNaN(birthdayDate.getTime())
         ? ''
         : birthdayDate.toISOString().slice(0, 10),
+      workStartDate: workStartDate && !Number.isNaN(workStartDate.getTime())
+        ? workStartDate.toISOString().slice(0, 10)
+        : '',
       department: person.department || '',
       role: person.role || '',
     });
@@ -299,6 +307,7 @@ export default function PeopleList({
           email: editForm.email,
           phone: editForm.phone || null,
           birthday: editForm.birthday,
+          workStartDate: editForm.workStartDate || null,
           department: editForm.department || undefined,
           role: editForm.role || undefined,
         }),
@@ -436,6 +445,15 @@ export default function PeopleList({
                           type="date"
                           value={form.birthday}
                           onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                          className="ds-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="ds-label">Work start date <span className="text-slate-400 font-normal">(optional)</span></label>
+                        <input
+                          type="date"
+                          value={form.workStartDate}
+                          onChange={(e) => setForm({ ...form, workStartDate: e.target.value })}
                           className="ds-input"
                         />
                       </div>
@@ -699,6 +717,15 @@ export default function PeopleList({
                     />
                   </div>
                   <div>
+                    <label className="ds-label">Work start date <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <input
+                      type="date"
+                      value={form.workStartDate}
+                      onChange={(e) => setForm({ ...form, workStartDate: e.target.value })}
+                      className="ds-input"
+                    />
+                  </div>
+                  <div>
                     <label className="ds-label">Department</label>
                     <input
                       value={form.department}
@@ -853,6 +880,15 @@ export default function PeopleList({
                       type="date"
                       value={editForm.birthday}
                       onChange={(e) => setEditForm({ ...editForm, birthday: e.target.value })}
+                      className="ds-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="ds-label">Work start date <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <input
+                      type="date"
+                      value={editForm.workStartDate}
+                      onChange={(e) => setEditForm({ ...editForm, workStartDate: e.target.value })}
                       className="ds-input"
                     />
                   </div>

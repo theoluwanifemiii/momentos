@@ -14,6 +14,7 @@ import {
   getUserErrorMessage,
   prisma,
 } from "../serverContext";
+import posthog from "../lib/posthog";
 
 const PhaseOneCategoryOrder: MomentCategory[] = [
   "BIRTHDAY",
@@ -132,7 +133,7 @@ const resolveCustomInterval = (
 ) => {
   if (recurrenceRule !== "CUSTOM") return null;
   if (!customIntervalDays || customIntervalDays < 1) {
-    throw new Error("Custom recurrence requires a valid interval (in days).");
+    throw new Error("Invalid custom recurrence: a valid interval (in days) is required.");
   }
   return customIntervalDays;
 };
@@ -378,6 +379,19 @@ export function registerMomentsRoutes(app: Express) {
           },
         });
 
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "moment_created",
+          properties: {
+            moment_id: moment.id,
+            category: moment.category,
+            scope: "PERSONAL",
+            recurrence_rule: moment.recurrenceRule,
+            delivery_channels: moment.deliveryChannels,
+            organization_id: req.organizationId,
+          },
+        });
+
         res.status(201).json({ moment: serializeMoment(moment) });
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
@@ -471,6 +485,20 @@ export function registerMomentsRoutes(app: Express) {
                 person: true,
               },
             },
+          },
+        });
+
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "moment_created",
+          properties: {
+            moment_id: moment.id,
+            category: moment.category,
+            scope: data.scope,
+            recurrence_rule: moment.recurrenceRule,
+            delivery_channels: moment.deliveryChannels,
+            recipient_count: personIds.length,
+            organization_id: req.organizationId,
           },
         });
 
@@ -593,6 +621,15 @@ export function registerMomentsRoutes(app: Express) {
           return res.status(404).json({ error: "Moment not found" });
         }
 
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "moment_updated",
+          properties: {
+            moment_id: existing.id,
+            organization_id: req.organizationId,
+          },
+        });
+
         res.json({ moment: serializeMoment(moment) });
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
@@ -631,6 +668,16 @@ export function registerMomentsRoutes(app: Express) {
           },
         });
 
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "moment_status_changed",
+          properties: {
+            moment_id: existing.id,
+            status: data.status,
+            organization_id: req.organizationId,
+          },
+        });
+
         res.json({ moment: serializeMoment(moment) });
       } catch (err: any) {
         res.status(400).json({ error: getUserErrorMessage(err) });
@@ -657,6 +704,15 @@ export function registerMomentsRoutes(app: Express) {
         }
 
         await prisma.moment.delete({ where: { id: existing.id } });
+
+        posthog.capture({
+          distinctId: req.userId!,
+          event: "moment_deleted",
+          properties: {
+            moment_id: existing.id,
+            organization_id: req.organizationId,
+          },
+        });
 
         res.json({ success: true });
       } catch (err: any) {

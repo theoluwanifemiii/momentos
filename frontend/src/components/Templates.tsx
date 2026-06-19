@@ -18,6 +18,16 @@ type TemplatesProps = {
 
 type DeliveryChannel = 'email' | 'sms' | 'whatsapp';
 
+const CATEGORY_LABELS: Record<string, string> = {
+  BIRTHDAY: 'Birthdays',
+  ANNIVERSARY: 'Work anniversaries',
+  GRADUATION: 'Graduation',
+  PROMOTION_CAREER_MILESTONE: 'Promotion / Career',
+  SPIRITUAL_MILESTONE: 'Spiritual milestone',
+  REMEMBRANCE_DAY: 'Remembrance day',
+  CUSTOM: 'Custom',
+};
+
 // Templates: create, set default, preview, test, and delete email templates.
 export default function Templates({ api, onboarding, onOnboardingUpdate, onSelectTab }: TemplatesProps) {
   const [templates, setTemplates] = useState<any[]>([]);
@@ -48,6 +58,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     content: '',
     imageUrl: '',
     channels: ['email'] as DeliveryChannel[],
+    categoryTag: '' as string,
   });
 
   useEffect(() => {
@@ -129,6 +140,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
             ? plainContent
             : form.content,
         channels: form.channels,
+        categoryTag: form.categoryTag || null,
       };
       if (form.imageUrl) {
         payload.imageUrl = form.imageUrl;
@@ -149,6 +161,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         content: '',
         imageUrl: '',
         channels: ['email'],
+        categoryTag: '',
       });
       setPlainContent('');
       setEditorMode('plain');
@@ -161,6 +174,24 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     } finally {
       setSaving(false);
     }
+  };
+
+  const openCreateModal = () => {
+    setError('');
+    setForm({
+      name: '',
+      type: 'PLAIN_TEXT',
+      subject: '',
+      content: '',
+      imageUrl: '',
+      channels: ['email'],
+      categoryTag: '',
+    });
+    setPlainContent('');
+    setEditorMode('plain');
+    setAiPrompt('');
+    setAiError('');
+    setShowCreateModal(true);
   };
 
   const closeCreateModal = () => {
@@ -221,11 +252,12 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         Array.isArray(template.channels) && template.channels.length > 0
           ? template.channels
           : ['email'],
+      categoryTag: template.categoryTag || '',
     });
     setPlainContent(
       template.type === 'HTML' ? stripHtml(template.content || '') : template.content || ''
     );
-    setEditorMode(template.type === 'HTML' ? 'plain' : 'plain');
+    setEditorMode(template.type === 'HTML' ? 'code' : 'plain');
   };
 
   const handleUpdate = async () => {
@@ -256,6 +288,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
               : form.content,
           imageUrl: form.imageUrl || null,
           channels: form.channels,
+          categoryTag: form.categoryTag || null,
         }),
       });
       setEditingTemplate(null);
@@ -266,6 +299,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
         content: '',
         imageUrl: '',
         channels: ['email'],
+        categoryTag: '',
       });
       setPlainContent('');
       setEditorMode('plain');
@@ -412,7 +446,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
               MomentOS provides a curated set of templates.
             </div>
             <Button
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
             >
               Create Template
             </Button>
@@ -440,14 +474,14 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                 {templates.map((template) => (
                   <tr key={template.id}>
                     <td className="ds-td font-medium">
-                      <span>{template.name}</span>
-                      {/*
-                      {template.isDefault && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                          Default
-                        </span>
-                      )}
-                      */}
+                      <div className="flex flex-col gap-1">
+                        <span>{template.name}</span>
+                        {template.categoryTag && (
+                          <span className="inline-flex w-fit items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                            {CATEGORY_LABELS[template.categoryTag] || template.categoryTag}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="ds-td text-gray-600">{template.type}</td>
                     <td className="ds-td text-gray-600">
@@ -464,7 +498,7 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                           checked={template.isDefault}
                           onChange={() => handleSetDefault(template.id)}
                         />
-                        <span className="text-gray-600">Default</span>
+                        <span className="text-gray-600 text-sm">Default</span>
                       </label>
                     </td>
                     <td className="ds-td">
@@ -677,6 +711,21 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                       Email, SMS, and WhatsApp are sent only if enabled in Settings.
                     </p>
                   </div>
+                  <div>
+                    <label className="ds-label">Celebration type <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <Select
+                      value={form.categoryTag}
+                      onChange={(e) => setForm({ ...form, categoryTag: e.target.value })}
+                    >
+                      <option value="">Any / fallback default</option>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The scheduler will use this template specifically for the selected celebration type.
+                    </p>
+                  </div>
                   <div className="md:col-span-2">
                     <label className="ds-label">Content</label>
                     <textarea
@@ -808,6 +857,21 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       Email, SMS, and WhatsApp are sent only if enabled in Settings.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="ds-label">Celebration type <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <Select
+                      value={form.categoryTag}
+                      onChange={(e) => setForm({ ...form, categoryTag: e.target.value })}
+                    >
+                      <option value="">Any / fallback default</option>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The scheduler will use this template specifically for the selected celebration type.
                     </p>
                   </div>
                   {form.type === 'CUSTOM_IMAGE' && (

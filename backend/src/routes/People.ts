@@ -76,6 +76,7 @@ export function registerPeopleRoutes(app: Express) {
                 firstName: person.firstName,
                 phone: person.phone ?? null,
                 birthday: person.birthday,
+                ...(person.workStartDate !== undefined ? { workStartDate: person.workStartDate } : {}),
                 department: person.department,
                 role: person.role,
               },
@@ -86,6 +87,7 @@ export function registerPeopleRoutes(app: Express) {
                 email: person.email,
                 phone: person.phone ?? null,
                 birthday: person.birthday,
+                workStartDate: person.workStartDate ?? null,
                 department: person.department,
                 role: person.role,
               },
@@ -258,6 +260,52 @@ export function registerPeopleRoutes(app: Express) {
     },
   );
 
+  // Get upcoming work anniversaries (next 30 days)
+  app.get(
+    "/api/people/upcoming-anniversaries",
+    authenticate,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        // workStartDate is a new field — cast where clause until prisma generate is re-run locally
+        const people = await (prisma.person as any).findMany({
+          where: {
+            organizationId: req.organizationId!,
+            optedOut: false,
+            workStartDate: { not: null },
+          },
+        });
+
+        const org = await prisma.organization.findUnique({
+          where: { id: req.organizationId! },
+          select: { timezone: true },
+        });
+
+        const orgNow = getOrgDateTime(org?.timezone);
+        const today = orgNow.startOf("day");
+        const windowEnd = today.plus({ days: 30 }).endOf("day");
+
+        const upcoming = (people as any[])
+          .filter((person) => {
+            if (!person.workStartDate) return false;
+            const nextOccurrence = getNextBirthdayOccurrence(
+              person.workStartDate,
+              today,
+            );
+            return nextOccurrence <= windowEnd;
+          })
+          .sort((a: any, b: any) => {
+            const aNext = getNextBirthdayOccurrence(a.workStartDate, today);
+            const bNext = getNextBirthdayOccurrence(b.workStartDate, today);
+            return aNext.toMillis() - bNext.toMillis();
+          });
+
+        res.json({ upcoming });
+      } catch (err: any) {
+        res.status(500).json({ error: getUserErrorMessage(err) });
+      }
+    },
+  );
+
   // Download sample CSV
   app.get("/api/people/sample-csv", (req: Request, res: Response) => {
     const csv = CSVValidator.generateSampleCSV();
@@ -282,12 +330,14 @@ export function registerPeopleRoutes(app: Express) {
           email: z.string().email(),
           phone: z.string().optional(),
           birthday: z.string().min(1),
+          workStartDate: z.string().optional(),
           department: z.string().optional(),
           role: z.string().optional(),
         });
 
         const data = schema.parse(req.body);
         const birthday = new Date(data.birthday);
+        const workStartDate = data.workStartDate ? new Date(data.workStartDate) : null;
         let phone: string | null = null;
         try {
           phone = normalizeOptionalPhone(data.phone);
@@ -312,6 +362,7 @@ export function registerPeopleRoutes(app: Express) {
               email: data.email.toLowerCase(),
               phone,
               birthday,
+              workStartDate,
               department: data.department,
               role: data.role,
             },

@@ -6,6 +6,7 @@ import { z, ZodError } from "zod";
 import { createHash, randomBytes } from "crypto";
 import { EmailService } from "../services/emailService";
 import { createRateLimiter } from "../middleware/security";
+import posthog from "../lib/posthog";
 import {
   authMagicLinkTemplate,
   resetPasswordLinkTemplate,
@@ -15,6 +16,7 @@ import {
 } from "../services/internalEmailTemplates";
 import {
   APP_URL,
+  ADMIN_APP_URL,
   ADMIN_BOOTSTRAP_TOKEN,
   ADMIN_CSRF_COOKIE,
   ADMIN_EMAIL_DOMAIN,
@@ -45,6 +47,12 @@ import {
 
 const buildAppUrl = (path: string) => {
   const base = APP_URL.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
+};
+
+const buildAdminUrl = (path: string) => {
+  const base = (ADMIN_APP_URL || APP_URL).replace(/\/$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;
 };
@@ -217,7 +225,7 @@ const sendAuthMagicLink = async (params: {
     where: {
       email: params.user.email,
       userId: params.user.id,
-      purpose: OtpPurpose.PASSWORD_RESET,
+      purpose: OtpPurpose.AUTH_MAGIC_LINK,
       consumedAt: null,
     },
     data: { consumedAt: now },
@@ -227,7 +235,7 @@ const sendAuthMagicLink = async (params: {
     data: {
       email: params.user.email,
       userId: params.user.id,
-      purpose: OtpPurpose.PASSWORD_RESET,
+      purpose: OtpPurpose.AUTH_MAGIC_LINK,
       codeHash: tokenHash,
       expiresAt,
       maxAttempts: 1,
@@ -311,58 +319,58 @@ export function registerAuthRoutes(app: Express) {
     "/api/internal/admin/auth/login",
     adminAuthRateLimit,
     async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        email: z.string().email(),
-        password: z.string().min(8),
-      });
+      try {
+        const schema = z.object({
+          email: z.string().email(),
+          password: z.string().min(8),
+        });
 
-      const data = schema.parse(req.body);
-      const normalizedEmail = data.email.trim().toLowerCase();
+        const data = schema.parse(req.body);
+        const normalizedEmail = data.email.trim().toLowerCase();
 
-      if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
-        return res.status(403).json({ error: "Admin email domain not allowed" });
-      }
+        if (!normalizedEmail.endsWith(`@${ADMIN_EMAIL_DOMAIN}`)) {
+          return res.status(403).json({ error: "Admin email domain not allowed" });
+        }
 
-      const admin = await prisma.adminUser.findUnique({
-        where: { email: normalizedEmail },
-      });
+        const admin = await prisma.adminUser.findUnique({
+          where: { email: normalizedEmail },
+        });
 
-      if (!admin || !admin.isActive) {
-        return res.status(401).json({ error: "Invalid admin credentials" });
-      }
+        if (!admin || !admin.isActive) {
+          return res.status(401).json({ error: "Invalid admin credentials" });
+        }
 
-      const valid = await bcrypt.compare(data.password, admin.passwordHash);
-      if (!valid) {
-        return res.status(401).json({ error: "Invalid admin credentials" });
-      }
+        const valid = await bcrypt.compare(data.password, admin.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ error: "Invalid admin credentials" });
+        }
 
-      await prisma.adminUser.update({
-        where: { id: admin.id },
-        data: { lastLoginAt: new Date() },
-      });
+        await prisma.adminUser.update({
+          where: { id: admin.id },
+          data: { lastLoginAt: new Date() },
+        });
 
-      const session = await createAdminSession(
-        admin.id,
-        admin.role as AdminRoleType,
-        req,
+        const session = await createAdminSession(
+          admin.id,
+          admin.role as AdminRoleType,
+          req,
+          res
+        );
+
+        res.json({
+          admin: {
+            id: admin.id,
+            email: admin.email,
+            role: admin.role,
+          },
+          sessionToken: session.sessionToken,
+          csrfToken: session.csrfToken,
+        });
+      } catch (err: any) {
         res
-      );
-
-      res.json({
-        admin: {
-          id: admin.id,
-          email: admin.email,
-          role: admin.role,
-        },
-        sessionToken: session.sessionToken,
-        csrfToken: session.csrfToken,
-      });
-    } catch (err: any) {
-      res
-        .status(400)
-        .json({ error: getUserErrorMessage(err, "Admin login failed") });
-    }
+          .status(400)
+          .json({ error: getUserErrorMessage(err, "Admin login failed") });
+      }
     }
   );
 
@@ -562,18 +570,133 @@ export function registerAuthRoutes(app: Express) {
     }
   );
 
+  // ── Admin forgot / reset password ─────────────────────────────────────────
+  const adminForgotPasswordRateLimit = createRateLimiter({
+    keyPrefix: "admin-forgot",
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+  });
+
+  const adminResetPasswordRateLimit = createRateLimiter({
+    keyPrefix: "admin-reset",
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+  });
+
+  app.post(
+    "/api/internal/admin/auth/forgot-password",
+    adminForgotPasswordRateLimit,
+    async (req: Request, res: Response) => {
+      try {
+        const schema = z.object({ email: z.string().trim().email() });
+        const { email } = schema.parse(req.body);
+        const normalizedEmail = email.toLowerCase();
+
+        const admin = await prisma.adminUser.findUnique({
+          where: { email: normalizedEmail },
+        });
+
+        // Always respond the same way to avoid email enumeration
+        if (admin && admin.isActive) {
+          const token = jwt.sign(
+            {
+              adminId: admin.id,
+              email: admin.email,
+              purpose: "ADMIN_PASSWORD_RESET",
+              fingerprint: hashToken(admin.passwordHash || "__NO_PASSWORD__"),
+            },
+            JWT_SECRET,
+            { expiresIn: "30m" }
+          );
+
+          const resetUrl = `${buildAdminUrl("/admin/login")}?token=${encodeURIComponent(token)}`;
+          const fromEmail = resolveFromEmail(DEFAULT_FROM_EMAIL);
+          const fromName = DEFAULT_FROM_NAME || "MomentOS";
+
+          if (fromEmail) {
+            await EmailService.send({
+              to: admin.email,
+              subject: "MomentOS Admin — Reset your password",
+              text: `You requested a password reset for your MomentOS Admin account.\n\nClick the link below to set a new password (valid for 30 minutes):\n\n${resetUrl}\n\nIf you did not request this, you can safely ignore this email.`,
+              html: `<p>You requested a password reset for your <strong>MomentOS Admin</strong> account.</p><p><a href="${resetUrl}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request this, ignore this email.</p>`,
+              from: { name: fromName, email: fromEmail },
+            });
+          }
+        }
+
+        res.json({ success: true, message: "If the account exists, a reset link was sent." });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
+      }
+    }
+  );
+
+  app.post(
+    "/api/internal/admin/auth/reset-password",
+    adminResetPasswordRateLimit,
+    async (req: Request, res: Response) => {
+      try {
+        const schema = z.object({
+          token: z.string().min(20),
+          password: z.string().min(8),
+        });
+
+        const { token, password } = schema.parse(req.body);
+
+        let payload: { adminId: string; email: string; purpose: string; fingerprint: string };
+        try {
+          payload = jwt.verify(token, JWT_SECRET) as typeof payload;
+        } catch {
+          return res.status(400).json({ error: "Reset link is invalid or expired." });
+        }
+
+        if (payload.purpose !== "ADMIN_PASSWORD_RESET") {
+          return res.status(400).json({ error: "Reset link is invalid." });
+        }
+
+        const admin = await prisma.adminUser.findUnique({ where: { id: payload.adminId } });
+        if (!admin || !admin.isActive) {
+          return res.status(404).json({ error: "Admin account not found." });
+        }
+
+        if (admin.email.toLowerCase() !== payload.email.toLowerCase()) {
+          return res.status(400).json({ error: "Reset link is invalid." });
+        }
+
+        const expectedFingerprint = hashToken(admin.passwordHash || "__NO_PASSWORD__");
+        if (payload.fingerprint !== expectedFingerprint) {
+          return res.status(400).json({ error: "Reset link has already been used." });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        await prisma.adminUser.update({ where: { id: admin.id }, data: { passwordHash } });
+
+        // Revoke all active sessions for this admin
+        await prisma.adminSession.updateMany({
+          where: { adminId: admin.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
+      }
+    }
+  );
+  // ── End admin forgot / reset password ─────────────────────────────────────
+
   app.post(
     "/api/auth/magic/request",
     authMagicRequestRateLimit,
     async (req: Request, res: Response) => {
       let parsedInput:
         | {
-            email: string;
-            mode: "LOGIN" | "REGISTER";
-            accountType?: "ORGANIZATION" | "INDIVIDUAL";
-            organizationName?: string;
-            timezone?: string;
-          }
+          email: string;
+          mode: "LOGIN" | "REGISTER";
+          accountType?: "ORGANIZATION" | "INDIVIDUAL";
+          organizationName?: string;
+          timezone?: string;
+        }
         | undefined;
       try {
         const schema = z.object({
@@ -660,6 +783,17 @@ export function registerAuthRoutes(app: Express) {
         await sendAuthMagicLink({
           user: { id: user.id, email: user.email },
           mode: "REGISTER",
+        });
+
+        posthog.capture({
+          distinctId: user.id,
+          event: "magic_link_requested",
+          properties: {
+            mode: "REGISTER",
+            account_type: accountType,
+            organization_id: org.id,
+            $set: { email: user.email, organization_id: org.id },
+          },
         });
 
         return res.json({
@@ -785,7 +919,7 @@ export function registerAuthRoutes(app: Express) {
           where: {
             email: user.email,
             userId: user.id,
-            purpose: OtpPurpose.PASSWORD_RESET,
+            purpose: OtpPurpose.AUTH_MAGIC_LINK,
             codeHash: tokenHash,
             consumedAt: null,
             expiresAt: { gt: new Date() },
@@ -870,6 +1004,23 @@ export function registerAuthRoutes(app: Express) {
           JWT_SECRET,
           { expiresIn: "7d" }
         );
+
+        posthog.identify({
+          distinctId: user.id,
+          properties: {
+            email: user.email,
+            organization_id: user.organizationId,
+            role: user.role,
+          },
+        });
+        posthog.capture({
+          distinctId: user.id,
+          event: firstVerifiedLogin ? "user_registered" : "magic_link_verified",
+          properties: {
+            organization_id: user.organizationId,
+            first_login: firstVerifiedLogin,
+          },
+        });
 
         return res.json({
           token: sessionToken,
@@ -972,6 +1123,25 @@ export function registerAuthRoutes(app: Express) {
         accountType: data.accountType,
         requestId,
         outcome: "success",
+      });
+
+      posthog.identify({
+        distinctId: user.id,
+        properties: {
+          email: user.email,
+          organization_id: org.id,
+          role: user.role,
+        },
+      });
+      posthog.capture({
+        distinctId: user.id,
+        event: "user_registered",
+        properties: {
+          account_type: data.accountType,
+          organization_id: org.id,
+          requires_verification: true,
+          auth_method: "password",
+        },
       });
 
       res.json({
@@ -1088,6 +1258,23 @@ export function registerAuthRoutes(app: Express) {
         JWT_SECRET,
         { expiresIn: "7d" }
       );
+
+      posthog.identify({
+        distinctId: user.id,
+        properties: {
+          email: user.email,
+          organization_id: user.organizationId,
+          role: user.role,
+        },
+      });
+      posthog.capture({
+        distinctId: user.id,
+        event: "user_logged_in",
+        properties: {
+          organization_id: user.organizationId,
+          auth_method: "password",
+        },
+      });
 
       res.json({
         token,
@@ -1236,6 +1423,12 @@ export function registerAuthRoutes(app: Express) {
         replyTo: WELCOME_REPLY_TO,
       });
 
+      posthog.capture({
+        distinctId: user.id,
+        event: "email_verified",
+        properties: { organization_id: user.organizationId },
+      });
+
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ error: getUserErrorMessage(err) });
@@ -1246,90 +1439,96 @@ export function registerAuthRoutes(app: Express) {
     "/api/auth/password/forgot",
     authForgotPasswordRateLimit,
     async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        email: z.string().trim().email(),
-      });
+      try {
+        const schema = z.object({
+          email: z.string().trim().email(),
+        });
 
-      const { email } = schema.parse(req.body);
-      const normalizedEmail = email.toLowerCase();
-      const user = await prisma.user.findUnique({
-        where: { email: normalizedEmail },
-      });
+        const { email } = schema.parse(req.body);
+        const normalizedEmail = email.toLowerCase();
+        const user = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+        });
 
-      if (user) {
-        await sendPasswordResetLink({ user });
+        if (user) {
+          await sendPasswordResetLink({ user });
+        }
+
+        res.json({
+          success: true,
+          message: "If the account exists, a reset link was sent.",
+        });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
       }
-
-      res.json({
-        success: true,
-        message: "If the account exists, a reset link was sent.",
-      });
-    } catch (err: any) {
-      res.status(400).json({ error: getUserErrorMessage(err) });
-    }
-  });
+    });
 
   app.post(
     "/api/auth/password/reset",
     authResetPasswordRateLimit,
     async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        token: z.string().min(20),
-        password: z.string().min(8),
-      });
-
-      const { token, password } = schema.parse(req.body);
-      let payload: {
-        userId: string;
-        email: string;
-        purpose?: string;
-        fingerprint?: string;
-      };
       try {
-        payload = jwt.verify(token, JWT_SECRET) as {
+        const schema = z.object({
+          token: z.string().min(20),
+          password: z.string().min(8),
+        });
+
+        const { token, password } = schema.parse(req.body);
+        let payload: {
           userId: string;
           email: string;
           purpose?: string;
           fingerprint?: string;
         };
-      } catch {
-        return res.status(400).json({ error: "Reset link is invalid or expired" });
+        try {
+          payload = jwt.verify(token, JWT_SECRET) as {
+            userId: string;
+            email: string;
+            purpose?: string;
+            fingerprint?: string;
+          };
+        } catch {
+          return res.status(400).json({ error: "Reset link is invalid or expired" });
+        }
+
+        if (payload.purpose !== "PASSWORD_RESET_LINK") {
+          return res.status(400).json({ error: "Reset link is invalid" });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
+          return res.status(400).json({ error: "Reset link is invalid" });
+        }
+
+        if (
+          payload.fingerprint &&
+          payload.fingerprint !== passwordResetFingerprint(user.passwordHash)
+        ) {
+          return res.status(400).json({ error: "Reset link has already been used" });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+        });
+
+        posthog.capture({
+          distinctId: user.id,
+          event: "password_reset",
+          properties: { email: user.email },
+        });
+
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(400).json({ error: getUserErrorMessage(err) });
       }
-
-      if (payload.purpose !== "PASSWORD_RESET_LINK") {
-        return res.status(400).json({ error: "Reset link is invalid" });
-      }
-
-      const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
-        return res.status(400).json({ error: "Reset link is invalid" });
-      }
-
-      if (
-        payload.fingerprint &&
-        payload.fingerprint !== passwordResetFingerprint(user.passwordHash)
-      ) {
-        return res.status(400).json({ error: "Reset link has already been used" });
-      }
-
-      const passwordHash = await bcrypt.hash(password, 10);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { passwordHash },
-      });
-
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(400).json({ error: getUserErrorMessage(err) });
-    }
-  });
+    });
 
   app.post("/api/waitlist", async (req: Request, res: Response) => {
     try {
@@ -1377,6 +1576,18 @@ export function registerAuthRoutes(app: Express) {
           email: waitlistFromEmail,
         },
         replyTo: WAITLIST_REPLY_TO,
+      });
+
+      posthog.capture({
+        distinctId: data.email.toLowerCase(),
+        event: "waitlist_signup",
+        properties: {
+          email: data.email.toLowerCase(),
+          organization: data.organization,
+          role: data.role || null,
+          team_size: data.teamSize || null,
+          country: data.country || null,
+        },
       });
 
       res.json({ success: true });
