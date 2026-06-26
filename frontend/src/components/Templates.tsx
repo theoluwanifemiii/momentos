@@ -319,25 +319,12 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
     setSaving(true);
     setError('');
     try {
-      const updates = [];
-      updates.push(
-        api.call(`/templates/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ isDefault: true }),
-        })
-      );
-
-      const existingDefault = templates.find((template) => template.isDefault);
-      if (existingDefault) {
-        updates.push(
-          api.call(`/templates/${existingDefault.id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ isDefault: false }),
-          })
-        );
-      }
-
-      await Promise.all(updates);
+      // Setting isDefault:true atomically clears the previous default on the
+      // backend, so no separate PUT is needed (and one would race this call).
+      await api.call(`/templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isDefault: true }),
+      });
       const onboardingResponse = await api.call('/onboarding/recompute', { method: 'POST' });
       if (onboardingResponse.onboarding) {
         onOnboardingUpdate(onboardingResponse.onboarding);
