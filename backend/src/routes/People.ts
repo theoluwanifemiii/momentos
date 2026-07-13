@@ -516,13 +516,16 @@ export function registerPeopleRoutes(app: Express) {
     },
   );
 
-  // Send birthday email now (manual trigger per person).
+  // Send birthday message now (manual trigger per person).
+  // Optional body: { channel: "email" | "sms" | "all" }
+  // Defaults to template.channels when not specified.
   app.post(
     "/api/people/:id/send-birthday",
     authenticate,
     async (req: AuthRequest, res: Response) => {
       try {
         const { id } = req.params;
+        const channelOverride = req.body?.channel as "email" | "sms" | "all" | undefined;
 
         const person = await prisma.person.findFirst({
           where: {
@@ -592,49 +595,90 @@ export function registerPeopleRoutes(app: Express) {
               : `${personalizedIntro}\n\n${content}`;
         }
 
-        const fromEmail = resolveFromEmail(
-          org?.emailFromAddress || DEFAULT_FROM_EMAIL,
-        );
+        const channels =
+          channelOverride === "all"
+            ? ["email", "sms"]
+            : channelOverride === "email" || channelOverride === "sms"
+            ? [channelOverride]
+            : template.channels?.length
+            ? template.channels
+            : ["email"];
 
-        if (!fromEmail) {
-          return res.status(400).json({ error: "Sender email not configured" });
+        const results: string[] = [];
+
+        if (channels.includes("email")) {
+          const fromEmail = resolveFromEmail(
+            org?.emailFromAddress || DEFAULT_FROM_EMAIL,
+          );
+          if (!fromEmail) {
+            return res.status(400).json({ error: "Sender email not configured" });
+          }
+          const result = await EmailService.send({
+            to: person.email,
+            subject,
+            html: template.type === "HTML" ? content : undefined,
+            text: template.type === "PLAIN_TEXT" ? content : undefined,
+            from: {
+              name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
+              email: fromEmail,
+            },
+          });
+          await prisma.deliveryLog.create({
+            data: {
+              personId: person.id,
+              templateId: template.id,
+              organizationId: req.organizationId!,
+              channel: "email",
+              status: "SENT",
+              scheduledFor: new Date(),
+              sentAt: new Date(),
+              externalId: result.id,
+            },
+          });
+          results.push("email");
         }
 
-        const result = await EmailService.send({
-          to: person.email,
-          subject,
-          html: template.type === "HTML" ? content : undefined,
-          text: template.type === "PLAIN_TEXT" ? content : undefined,
-          from: {
-            name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
-            email: fromEmail,
-          },
-        });
-
-        await prisma.deliveryLog.create({
-          data: {
-            personId: person.id,
-            templateId: template.id,
-            organizationId: req.organizationId!,
-            status: "SENT",
-            scheduledFor: new Date(),
-            sentAt: new Date(),
-            externalId: result.id,
-          },
-        });
+        if (channels.includes("sms")) {
+          if (!org?.smsEnabled) {
+            return res.status(400).json({ error: "SMS is not enabled for this organisation" });
+          }
+          if (!person.phone) {
+            return res.status(400).json({ error: "Person has no phone number on record" });
+          }
+          const smsContent = toSmsText(content);
+          const smsResult = await smsService.send({
+            to: person.phone,
+            message: smsContent,
+            senderId: org.senderId || "MomentOS",
+          });
+          await prisma.deliveryLog.create({
+            data: {
+              personId: person.id,
+              templateId: template.id,
+              organizationId: req.organizationId!,
+              channel: "sms",
+              status: smsResult.mocked ? "SENT" : "SENT",
+              scheduledFor: new Date(),
+              sentAt: new Date(),
+              externalId: String(smsResult.messageId || ""),
+            },
+          });
+          results.push("sms");
+        }
 
         posthog.capture({
           distinctId: req.userId!,
-          event: "birthday_email_sent",
+          event: "birthday_message_sent",
           properties: {
             person_id: person.id,
             template_id: template.id,
             organization_id: req.organizationId,
+            channels: results,
             manual: true,
           },
         });
 
-        res.json({ success: true });
+        res.json({ success: true, channels: results });
       } catch (err: any) {
         res.status(500).json({ error: getUserErrorMessage(err) });
       }
