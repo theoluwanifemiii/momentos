@@ -410,15 +410,16 @@ export async function createAdminSession(
     expiresAt: Math.min(Date.now() + 15_000, expiresAt.getTime()),
   });
 
-  const isProd = process.env.NODE_ENV === "production";
   const host = String(req.headers.host || "").toLowerCase();
   const isLocalHost =
     host.includes("localhost") ||
     host.startsWith("127.0.0.1") ||
     host.startsWith("[::1]");
-  // In production, admin auth is usually cross-site (frontend != API host), so enforce
-  // Secure + SameSite=None for any non-local host to keep session cookies attached.
-  const secureCookie = isProd && !isLocalHost;
+  // Use SameSite=None; Secure for any non-local host regardless of NODE_ENV.
+  // SameSite=Lax cookies are not sent on cross-origin requests (e.g. Vercel →
+  // Railway), so relying on NODE_ENV meant missing cookies in deployments where
+  // NODE_ENV wasn't explicitly set to "production".
+  const secureCookie = !isLocalHost;
 
   res.cookie(ADMIN_SESSION_COOKIE, sessionToken, {
     httpOnly: true,
@@ -442,13 +443,12 @@ export async function createAdminSession(
 
 export function reissueAdminCsrfCookie(req: Request, res: Response): string {
   const csrfToken = randomBytes(24).toString("hex");
-  const isProd = process.env.NODE_ENV === "production";
   const host = String(req.headers.host || "").toLowerCase();
   const isLocalHost =
     host.includes("localhost") ||
     host.startsWith("127.0.0.1") ||
     host.startsWith("[::1]");
-  const secureCookie = isProd && !isLocalHost;
+  const secureCookie = !isLocalHost;
   res.cookie(ADMIN_CSRF_COOKIE, csrfToken, {
     httpOnly: false,
     sameSite: secureCookie ? "none" : "lax",
