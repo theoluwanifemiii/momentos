@@ -166,6 +166,7 @@ export const createAdminCsrfProtection = (options: {
     "/api/internal/admin/auth/login",
     "/api/internal/admin/auth/register",
     "/api/internal/admin/auth/bootstrap",
+    "/api/internal/admin/auth/logout",
   ]);
   const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 

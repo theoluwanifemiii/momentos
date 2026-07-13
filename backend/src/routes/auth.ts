@@ -37,6 +37,7 @@ import {
   adminUserCache,
   authenticateAdmin,
   createAdminSession,
+  reissueAdminCsrfCookie,
   getUserErrorMessage,
   OtpPurpose,
   prisma,
@@ -537,11 +538,14 @@ export function registerAuthRoutes(app: Express) {
     authenticateAdmin,
     adminCache(10),
     async (req: AdminAuthRequest, res: Response) => {
+      const csrfToken =
+        req.cookies?.[ADMIN_CSRF_COOKIE] || reissueAdminCsrfCookie(req, res);
+
       const cached = adminUserCache.get(req.adminId!);
       if (cached && cached.expiresAt > Date.now()) {
         return res.json({
           admin: cached.admin,
-          csrfToken: req.cookies?.[ADMIN_CSRF_COOKIE] || null,
+          csrfToken,
         });
       }
 
@@ -565,7 +569,7 @@ export function registerAuthRoutes(app: Express) {
 
       res.json({
         admin: payload,
-        csrfToken: req.cookies?.[ADMIN_CSRF_COOKIE] || null,
+        csrfToken,
       });
     }
   );

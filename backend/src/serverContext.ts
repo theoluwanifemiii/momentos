@@ -440,6 +440,24 @@ export async function createAdminSession(
   };
 }
 
+export function reissueAdminCsrfCookie(req: Request, res: Response): string {
+  const csrfToken = randomBytes(24).toString("hex");
+  const isProd = process.env.NODE_ENV === "production";
+  const host = String(req.headers.host || "").toLowerCase();
+  const isLocalHost =
+    host.includes("localhost") ||
+    host.startsWith("127.0.0.1") ||
+    host.startsWith("[::1]");
+  const secureCookie = isProd && !isLocalHost;
+  res.cookie(ADMIN_CSRF_COOKIE, csrfToken, {
+    httpOnly: false,
+    sameSite: secureCookie ? "none" : "lax",
+    secure: secureCookie,
+    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+  });
+  return csrfToken;
+}
+
 export async function revokeAdminSession(token?: string) {
   if (!token) {
     return;

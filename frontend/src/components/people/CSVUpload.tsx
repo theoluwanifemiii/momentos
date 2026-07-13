@@ -24,9 +24,18 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setCsvContent(event.target?.result as string);
+      const buffer = event.target?.result as ArrayBuffer;
+      // Try UTF-8 first; if replacement chars appear (U+FFFD), the file is
+      // likely Windows-1252 (common when saving CSV from Excel on Windows).
+      // Fall back to windows-1252 so names with non-Latin characters
+      // (e.g. Yoruba diacritics: ọ, ẹ, ṣ) survive the round-trip.
+      let text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+      if (text.includes('�')) {
+        text = new TextDecoder('windows-1252').decode(buffer);
+      }
+      setCsvContent(text);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleSubmit = async () => {
