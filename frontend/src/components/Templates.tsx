@@ -389,23 +389,20 @@ export default function Templates({ api, onboarding, onOnboardingUpdate, onSelec
   };
 
   const toggleActionMenu = (template: any, trigger: HTMLButtonElement) => {
-    setActionMenu((current) => {
-      if (current && String(current.template?.id) === String(template?.id)) {
-        return null;
-      }
+    // Read current state from closure, not an updater fn — React Strict Mode
+    // double-invokes updater functions in dev, which would open then immediately close.
+    if (actionMenu && String(actionMenu.template?.id) === String(template?.id)) {
+      setActionMenu(null);
+      return;
+    }
 
-      const rect = trigger.getBoundingClientRect();
-      const menuWidth = 176; // ds-dropdown width (w-44)
-      const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
-      const left = Math.max(8, Math.min(maxLeft, rect.right + 8));
-      const top = Math.max(8, Math.min(window.innerHeight - 190, rect.top));
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 176; // ds-dropdown width (w-44)
+    const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
+    const left = Math.max(8, Math.min(maxLeft, rect.right + 8));
+    const top = Math.max(8, Math.min(window.innerHeight - 190, rect.top));
 
-      return {
-        template,
-        top,
-        left,
-      };
-    });
+    setActionMenu({ template, top, left });
   };
 
   const actionTemplate = actionMenu?.template ?? null;

@@ -304,23 +304,21 @@ export default function PeopleList({
   };
 
   const toggleActionMenu = (person: any, trigger: HTMLButtonElement) => {
-    setActionMenu((current) => {
-      if (current && String(current.person?.id) === String(person?.id)) {
-        return null;
-      }
+    // Read current state from closure, not from an updater fn — React Strict Mode
+    // double-invokes updater functions in dev, which would open then immediately close.
+    if (actionMenu && String(actionMenu.person?.id) === String(person?.id)) {
+      setActionMenu(null);
+      return;
+    }
 
-      const rect = trigger.getBoundingClientRect();
-      const menuWidth = 176; // ui-dropdown width (w-44)
-      const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
-      const left = Math.max(8, Math.min(maxLeft, rect.right + 8));
-      const top = Math.max(8, Math.min(window.innerHeight - 160, rect.top));
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 176; // ui-dropdown width (w-44)
+    // Right-align the dropdown below the button so it never clips off the right edge
+    const leftAligned = rect.right - menuWidth;
+    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, leftAligned));
+    const top = Math.max(8, Math.min(window.innerHeight - 160, rect.bottom + 4));
 
-      return {
-        person,
-        top,
-        left,
-      };
-    });
+    setActionMenu({ person, top, left });
   };
 
   const actionPerson = actionMenu?.person ?? null;
@@ -606,22 +604,17 @@ export default function PeopleList({
                         e.stopPropagation();
                         toggleActionMenu(person, e.currentTarget);
                       }}
-                      className={`ds-icon-trigger ${
+                      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
                         actionMenu && String(actionMenu.person?.id) === String(person.id)
-                          ? 'bg-gray-50 text-gray-700'
-                          : ''
+                          ? 'border-blue-300 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800'
                       }`}
                       aria-label="Open row actions"
+                      data-action-menu-root="true"
                     >
-                      <svg
-                        className="h-3.5 w-3.5"
-                        viewBox="0 0 16 16"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <circle cx="3" cy="8" r="1.25" />
-                        <circle cx="8" cy="8" r="1.25" />
-                        <circle cx="13" cy="8" r="1.25" />
+                      Send
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </button>
                   </div>
