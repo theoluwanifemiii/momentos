@@ -9,6 +9,36 @@ type AdminInfo = {
   role: "SUPER_ADMIN" | "SUPPORT";
 };
 
+function useSessionExpiryWarning(sessionExpiresAt: string | null) {
+  const [warning, setWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionExpiresAt) return;
+    const expiresMs = new Date(sessionExpiresAt).getTime();
+
+    const update = () => {
+      const remaining = expiresMs - Date.now();
+      if (remaining <= 0) {
+        setWarning("Your session has expired. Please sign in again.");
+      } else if (remaining < 60 * 60 * 1000) {
+        const mins = Math.ceil(remaining / 60_000);
+        setWarning(`Your session expires in ${mins} minute${mins === 1 ? "" : "s"}.`);
+      } else if (remaining < 24 * 60 * 60 * 1000) {
+        const hrs = Math.ceil(remaining / 3_600_000);
+        setWarning(`Your session expires in ${hrs} hour${hrs === 1 ? "" : "s"}.`);
+      } else {
+        setWarning(null);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 60_000);
+    return () => clearInterval(interval);
+  }, [sessionExpiresAt]);
+
+  return warning;
+}
+
 type NavItem = {
   to: string;
   label: string;
@@ -29,9 +59,12 @@ const navItems: NavItem[] = [
 export default function AdminLayout() {
   const navigate = useNavigate();
   const [admin, setAdmin] = useState<AdminInfo | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const expiryWarning = useSessionExpiryWarning(sessionExpiresAt);
 
   useEffect(() => {
     const loadAdmin = async () => {
@@ -39,6 +72,7 @@ export default function AdminLayout() {
       try {
         const data = await adminApi.call("/auth/me");
         setAdmin(data.admin);
+        if (data.sessionExpiresAt) setSessionExpiresAt(data.sessionExpiresAt);
       } catch (err: any) {
         localStorage.removeItem("admin_session_token");
         localStorage.removeItem("admin_csrf_token");
@@ -98,6 +132,11 @@ export default function AdminLayout() {
           ))}
         </nav>
         <div className="mt-auto space-y-3 pt-6">
+          {expiryWarning ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {expiryWarning}
+            </div>
+          ) : null}
           {error ? <div className="ds-alert ds-alert-error text-xs">{error}</div> : null}
           <Button onClick={handleLogout} variant="secondary" fullWidth>
             Sign out
@@ -116,6 +155,11 @@ export default function AdminLayout() {
                 Sign out
               </Button>
             </div>
+            {expiryWarning ? (
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {expiryWarning}
+              </div>
+            ) : null}
             {error ? <div className="mb-3 ds-alert ds-alert-error text-xs">{error}</div> : null}
             <nav className="ds-tablist">
               {navItems.map((item) => (

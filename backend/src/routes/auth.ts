@@ -541,11 +541,14 @@ export function registerAuthRoutes(app: Express) {
       const csrfToken =
         req.cookies?.[ADMIN_CSRF_COOKIE] || reissueAdminCsrfCookie(req, res);
 
+      const sessionExpiresAt = req.sessionExpiresAt?.toISOString() ?? null;
+
       const cached = adminUserCache.get(req.adminId!);
       if (cached && cached.expiresAt > Date.now()) {
         return res.json({
           admin: cached.admin,
           csrfToken,
+          sessionExpiresAt,
         });
       }
 
@@ -570,6 +573,7 @@ export function registerAuthRoutes(app: Express) {
       res.json({
         admin: payload,
         csrfToken,
+        sessionExpiresAt,
       });
     }
   );

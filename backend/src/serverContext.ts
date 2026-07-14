@@ -198,7 +198,7 @@ export type AdminRoleType = "SUPER_ADMIN" | "SUPPORT";
 
 const adminSessionCache = new Map<
   string,
-  { adminId: string; adminRole: AdminRoleType; expiresAt: number }
+  { adminId: string; adminRole: AdminRoleType; expiresAt: number; sessionExpiresAt?: Date }
 >();
 
 export const adminUserCache = new Map<
@@ -520,6 +520,7 @@ export interface AuthRequest extends Request {
 export interface AdminAuthRequest extends Request {
   adminId?: string;
   adminRole?: AdminRoleType;
+  sessionExpiresAt?: Date;
 }
 
 export async function authenticate(
@@ -568,6 +569,7 @@ export async function authenticateAdmin(
     if (cached && cached.expiresAt > Date.now()) {
       req.adminId = cached.adminId;
       req.adminRole = cached.adminRole;
+      req.sessionExpiresAt = cached.sessionExpiresAt;
       return next();
     }
 
@@ -586,10 +588,12 @@ export async function authenticateAdmin(
 
     req.adminId = session.adminId;
     req.adminRole = session.admin.role as AdminRoleType;
+    req.sessionExpiresAt = session.expiresAt;
     adminSessionCache.set(tokenHash, {
       adminId: session.adminId,
       adminRole: session.admin.role as AdminRoleType,
       expiresAt: Math.min(Date.now() + 15_000, session.expiresAt.getTime()),
+      sessionExpiresAt: session.expiresAt,
     });
     next();
   } catch (err) {

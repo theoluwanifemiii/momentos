@@ -172,6 +172,11 @@ export const adminApi = {
       const payload = text ? JSON.parse(text) : null;
 
       if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem(ADMIN_SESSION_TOKEN_KEY);
+          localStorage.removeItem(ADMIN_CSRF_TOKEN_KEY);
+          window.location.replace("/admin/login");
+        }
         const err = new Error(
           buildFriendlyError(payload, response.status)
         ) as any;
