@@ -99,16 +99,32 @@ export default function PeopleList({
     }
   };
 
-  const handleSend = async (personId: string, channel: 'email' | 'sms' | 'all') => {
+  const handleSendBirthday = async (personId: string) => {
     setSendMessage('');
-    setSendingAction(`${personId}:${channel}`);
+    setSendingAction(`${personId}:email`);
     try {
-      await api.call(`/people/${personId}/send-birthday`, {
+      await api.call(`/people/${personId}/send-birthday`, { method: 'POST' });
+      setSendMessage('Birthday email sent.');
+    } catch (err: any) {
+      setSendMessage(err.message);
+    } finally {
+      setSendingAction(null);
+    }
+  };
+
+  const handleSendSms = async (personId: string) => {
+    setSendMessage('');
+    setSendingAction(`${personId}:sms`);
+    try {
+      const result = await api.call(`/people/${personId}/send-sms`, {
         method: 'POST',
-        body: JSON.stringify({ channel }),
+        body: JSON.stringify({}),
       });
-      const label = channel === 'all' ? 'Email & SMS' : channel === 'email' ? 'Email' : 'SMS';
-      setSendMessage(`Birthday ${label} sent.`);
+      if (result?.mocked) {
+        setSendMessage(result?.message || 'SMS test mode is enabled. Message was mocked and not delivered.');
+      } else {
+        setSendMessage('Birthday SMS sent.');
+      }
     } catch (err: any) {
       setSendMessage(err.message);
     } finally {
@@ -758,25 +774,18 @@ export default function PeopleList({
                 Edit Person
               </button>
               <button
-                onClick={() => { setActionMenu(null); handleSend(actionPerson.id, 'email'); }}
+                onClick={() => { setActionMenu(null); handleSendBirthday(actionPerson.id); }}
                 disabled={!allowManualSend || sendingAction === `${actionPerson.id}:email`}
                 className="ds-dropdown-item"
               >
                 {sendingAction === `${actionPerson.id}:email` ? 'Sending Email...' : 'Send Birthday Email'}
               </button>
               <button
-                onClick={() => { setActionMenu(null); handleSend(actionPerson.id, 'sms'); }}
+                onClick={() => { setActionMenu(null); handleSendSms(actionPerson.id); }}
                 disabled={!allowManualSend || !actionPerson.phone || sendingAction === `${actionPerson.id}:sms`}
                 className="ds-dropdown-item"
               >
                 {sendingAction === `${actionPerson.id}:sms` ? 'Sending SMS...' : 'Send Birthday SMS'}
-              </button>
-              <button
-                onClick={() => { setActionMenu(null); handleSend(actionPerson.id, 'all'); }}
-                disabled={!allowManualSend || !actionPerson.phone || sendingAction === `${actionPerson.id}:all`}
-                className="ds-dropdown-item"
-              >
-                {sendingAction === `${actionPerson.id}:all` ? 'Sending All...' : 'Send All (Email + SMS)'}
               </button>
             </div>,
             document.body

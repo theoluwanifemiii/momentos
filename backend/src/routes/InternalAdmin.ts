@@ -2,6 +2,7 @@ import { Express, Request, Response } from "express";
 import { z } from "zod";
 import { Prisma, DeliveryStatus, FeedbackType } from "@prisma/client";
 import { EmailService } from "../services/emailService";
+import { smsService } from "../services/smsService";
 import {
   ADMIN_INVITE_FROM_EMAIL,
   ADMIN_INVITE_FROM_NAME,
@@ -520,6 +521,8 @@ app.post(
   authenticateAdmin,
   async (req: AdminAuthRequest, res: Response) => {
     try {
+      const channelOverride = req.body?.channel as "email" | "sms" | "all" | undefined;
+
       const person = await prisma.person.findUnique({
         where: { id: req.params.id },
       });
@@ -554,35 +557,70 @@ app.post(
       };
       const subject = interpolateTemplate(template.subject, variables);
       const content = interpolateTemplate(template.content, variables);
-      const fromEmail = resolveFromEmail(
-        org?.emailFromAddress || DEFAULT_FROM_EMAIL
-      );
-      if (!fromEmail) {
-        return res.status(400).json({ error: "Sender email not configured" });
+
+      const channels =
+        channelOverride === "all"
+          ? ["email", "sms"]
+          : channelOverride === "email" || channelOverride === "sms"
+          ? [channelOverride]
+          : ["email"];
+
+      const results: string[] = [];
+
+      if (channels.includes("email")) {
+        const fromEmail = resolveFromEmail(org?.emailFromAddress || DEFAULT_FROM_EMAIL);
+        if (!fromEmail) {
+          return res.status(400).json({ error: "Sender email not configured" });
+        }
+        const emailResult = await EmailService.send({
+          to: person.email,
+          subject,
+          html: template.type === "HTML" ? content : undefined,
+          text: template.type === "PLAIN_TEXT" ? content : undefined,
+          from: {
+            name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
+            email: fromEmail,
+          },
+        });
+        await prisma.deliveryLog.create({
+          data: {
+            personId: person.id,
+            templateId: template.id,
+            organizationId: person.organizationId,
+            channel: "email",
+            status: "SENT",
+            scheduledFor: new Date(),
+            sentAt: new Date(),
+            externalId: emailResult.id,
+          },
+        });
+        results.push("email");
       }
 
-      const result = await EmailService.send({
-        to: person.email,
-        subject,
-        html: template.type === "HTML" ? content : undefined,
-        text: template.type === "PLAIN_TEXT" ? content : undefined,
-        from: {
-          name: org?.emailFromName || org?.name || DEFAULT_FROM_NAME || "",
-          email: fromEmail,
-        },
-      });
-
-      await prisma.deliveryLog.create({
-        data: {
-          personId: person.id,
-          templateId: template.id,
-          organizationId: person.organizationId,
-          status: "SENT",
-          scheduledFor: new Date(),
-          sentAt: new Date(),
-          externalId: result.id,
-        },
-      });
+      if (channels.includes("sms")) {
+        if (!person.phone) {
+          return res.status(400).json({ error: "Person has no phone number on record" });
+        }
+        const smsContent = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+        const smsResult = await smsService.send({
+          to: person.phone,
+          message: smsContent,
+          senderId: org?.senderId || "MomentOS",
+        });
+        await prisma.deliveryLog.create({
+          data: {
+            personId: person.id,
+            templateId: template.id,
+            organizationId: person.organizationId,
+            channel: "sms",
+            status: "SENT",
+            scheduledFor: new Date(),
+            sentAt: new Date(),
+            externalId: String(smsResult.messageId || ""),
+          },
+        });
+        results.push("sms");
+      }
 
       await logAdminAction({
         adminId: req.adminId!,
@@ -591,7 +629,7 @@ app.post(
         targetId: person.id,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, channels: results });
     } catch (err: any) {
       res.status(500).json({ error: getUserErrorMessage(err, "Send failed") });
     }

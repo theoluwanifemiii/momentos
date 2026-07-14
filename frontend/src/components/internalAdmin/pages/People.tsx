@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { adminApi } from "../../../api";
 import { Button, Input, cn } from "../../ui";
 import AdminPage from "../ui/AdminPage";
@@ -19,6 +20,10 @@ export default function AdminPeople() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({ email: "", orgId: "" });
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -40,15 +45,47 @@ export default function AdminPeople() {
     load();
   }, []);
 
-  const handleSend = async (id: string) => {
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest("[data-send-menu]")) {
+        setOpenMenuId(null);
+      }
+    };
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, []);
+
+  const toggleMenu = (personId: string, trigger: HTMLButtonElement) => {
+    if (openMenuId === personId) {
+      setOpenMenuId(null);
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 176;
+    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth));
+    const top = Math.max(8, Math.min(window.innerHeight - 120, rect.bottom + 4));
+    setMenuPos({ top, left });
+    setOpenMenuId(personId);
+  };
+
+  const handleSend = async (id: string, channel: "email" | "sms" | "all") => {
+    setOpenMenuId(null);
     setError("");
+    setSendingId(`${id}:${channel}`);
     try {
-      await adminApi.call(`/people/${id}/send-birthday`, { method: "POST" });
-      await load();
+      await adminApi.call(`/people/${id}/send-birthday`, {
+        method: "POST",
+        body: JSON.stringify({ channel }),
+      });
     } catch (err: any) {
-      setError(err.message || "Failed to queue send");
+      setError(err.message || "Send failed");
+    } finally {
+      setSendingId(null);
     }
   };
+
+  const activePerson = openMenuId ? people.find((p) => p.id === openMenuId) : null;
 
   return (
     <AdminPage
@@ -114,10 +151,26 @@ export default function AdminPeople() {
                     </span>
                   </td>
                   <td className="ds-td">
-                    <div className="flex justify-end">
-                      <Button onClick={() => handleSend(person.id)} size="sm" variant="secondary">
-                        Send now
-                      </Button>
+                    <div className="flex justify-end" data-send-menu="true">
+                      <button
+                        type="button"
+                        data-send-menu="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMenu(person.id, e.currentTarget);
+                        }}
+                        disabled={!!sendingId}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          openMenuId === person.id
+                            ? "border-blue-300 bg-blue-50 text-blue-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        {sendingId?.startsWith(person.id) ? "Sending…" : "Send"}
+                        <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -133,6 +186,42 @@ export default function AdminPeople() {
           </table>
         </div>
       </div>
+
+      {openMenuId && activePerson && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              data-send-menu="true"
+              className="ds-dropdown"
+              style={{ top: menuPos.top, left: menuPos.left }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="ds-dropdown-item"
+                onClick={() => handleSend(activePerson.id, "email")}
+              >
+                Send Birthday Email
+              </button>
+              <button
+                className="ds-dropdown-item"
+                disabled={!activePerson.phone}
+                onClick={() => handleSend(activePerson.id, "sms")}
+                title={!activePerson.phone ? "No phone number on record" : undefined}
+              >
+                Send Birthday SMS
+              </button>
+              <button
+                className="ds-dropdown-item"
+                disabled={!activePerson.phone}
+                onClick={() => handleSend(activePerson.id, "all")}
+                title={!activePerson.phone ? "No phone number on record" : undefined}
+              >
+                Send All (Email + SMS)
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </AdminPage>
   );
 }
