@@ -65,8 +65,8 @@ export const OTP_TTL_MINUTES = 10;
 export const OTP_MAX_ATTEMPTS = 5;
 export const ADMIN_EMAIL_DOMAIN =
   process.env.ADMIN_EMAIL_DOMAIN || "usemomentos.xyz";
-export const ADMIN_SESSION_TTL_DAYS = Number(
-  process.env.ADMIN_SESSION_TTL_DAYS || 7
+export const ADMIN_SESSION_TTL_MINUTES = Number(
+  process.env.ADMIN_SESSION_TTL_MINUTES || 20
 );
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const ADMIN_CSRF_COOKIE = "admin_csrf";
@@ -392,7 +392,7 @@ export async function createAdminSession(
   const csrfToken = randomBytes(24).toString("hex");
   const tokenHash = hashToken(sessionToken);
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + ADMIN_SESSION_TTL_DAYS);
+  expiresAt.setMinutes(expiresAt.getMinutes() + ADMIN_SESSION_TTL_MINUTES);
 
   await prisma.adminSession.create({
     data: {
@@ -425,14 +425,14 @@ export async function createAdminSession(
     httpOnly: true,
     sameSite: secureCookie ? "none" : "lax",
     secure: secureCookie,
-    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+    maxAge: ADMIN_SESSION_TTL_MINUTES * 60 * 1000,
   });
 
   res.cookie(ADMIN_CSRF_COOKIE, csrfToken, {
     httpOnly: false,
     sameSite: secureCookie ? "none" : "lax",
     secure: secureCookie,
-    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+    maxAge: ADMIN_SESSION_TTL_MINUTES * 60 * 1000,
   });
 
   return {
@@ -453,7 +453,7 @@ export function reissueAdminCsrfCookie(req: Request, res: Response): string {
     httpOnly: false,
     sameSite: secureCookie ? "none" : "lax",
     secure: secureCookie,
-    maxAge: ADMIN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
+    maxAge: ADMIN_SESSION_TTL_MINUTES * 60 * 1000,
   });
   return csrfToken;
 }
