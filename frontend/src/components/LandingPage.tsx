@@ -1336,6 +1336,7 @@ const landingMarkup = `
           <ul class="space-y-2 text-sm text-slate-600">
             <li><a href="#features" class="hover:text-slate-900 transition-colors">Features</a></li>
             <li><a href="#how-it-works" class="hover:text-slate-900 transition-colors">How it works</a></li>
+            <li><a href="/docs" class="hover:text-slate-900 transition-colors">Documentation</a></li>
             <li><a href="/changelog" class="hover:text-slate-900 transition-colors">Changelog</a></li>
             <li><a href="#" data-action="open-waitlist" class="hover:text-slate-900 transition-colors">Join waitlist</a></li>
           </ul>

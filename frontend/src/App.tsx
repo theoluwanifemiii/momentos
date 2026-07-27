@@ -6,6 +6,7 @@ import { api } from './api';
 
 const LandingPage = lazy(() => import('./components/LandingPage.tsx'));
 const ChangelogPage = lazy(() => import('./components/ChangelogPage.tsx'));
+const DocsPage = lazy(() => import('./components/DocsPage.tsx'));
 const Dashboard = lazy(() => import('./components/Dashboard.tsx'));
 const LoginForm = lazy(() => import('./components/auth/LoginForm.tsx'));
 const RegisterForm = lazy(() => import('./components/auth/RegisterForm.tsx'));
@@ -176,6 +177,7 @@ export default function MomentOSApp() {
             }
           />
           <Route path="/changelog" element={<ChangelogPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route
             path="/login"
             element={
