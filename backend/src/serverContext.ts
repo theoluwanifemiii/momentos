@@ -13,6 +13,8 @@ export const prisma = new PrismaClient();
 export const JWT_SECRET = process.env.JWT_SECRET ?? "";
 export const DEFAULT_FROM_EMAIL =
   process.env.DEFAULT_FROM_EMAIL || "notifications@mail.usemomentos.xyz";
+export const MOMENT_FROM_EMAIL =
+  process.env.MOMENT_FROM_EMAIL || "moments@mail.usemomentos.xyz";
 export const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 export const WAITLIST_FROM_EMAIL =
   process.env.WAITLIST_FROM_EMAIL || "founder@mail.usemomentos.xyz";
