@@ -1,6 +1,6 @@
 const ENV_API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_REMOTE_API_URL = "https://momentos-production.up.railway.app/api";
-const DEFAULT_LOCAL_API_URL = "http://localhost:3001/api";
+const DEFAULT_LOCAL_API_URL = "/api";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 const normalizeApiUrl = (value?: string) => {

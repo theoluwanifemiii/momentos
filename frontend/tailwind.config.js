@@ -54,6 +54,16 @@ export default {
           800: "#991b1b",
           DEFAULT: "#dc2626",
         },
+        violet: {
+          100: "#ede9fe",
+          200: "#ddd6fe",
+          300: "#c4b5fd",
+          400: "#a78bfa",
+          500: "#8b5cf6",
+          700: "#6d28d9",
+          800: "#5b21b6",
+          DEFAULT: "#7c3aed",
+        },
       },
       spacing: {
         xxs: "4px",

@@ -1,15 +1,17 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { OnboardingState } from '../types/onboarding';
-import { Button, cn } from './ui';
+import { api } from '../api';
+import { cn, LogoMark } from './ui';
 import FeedbackWidget from './feedback/FeedbackWidget';
 
 const CSVUpload = lazy(() => import('./people/CSVUpload.tsx'));
 const PeopleList = lazy(() => import('./people/PeopleList.tsx'));
-const UpcomingCelebrations = lazy(() => import('./people/UpcomingCelebrations.tsx'));
 const Templates = lazy(() => import('./Templates.tsx'));
 const Settings = lazy(() => import('./Settings.tsx'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard.tsx'));
 const Moments = lazy(() => import('./Moments.tsx'));
+
+type Tab = 'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'settings';
 
 type DashboardProps = {
   user: any;
@@ -19,167 +21,163 @@ type DashboardProps = {
   };
 };
 
-// Dashboard: tabbed navigation for people, templates, and uploads.
-export default function Dashboard({ onLogout, api }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'settings'>('dashboard');
+function getEmailInitials(email: string): string {
+  const local = email?.split('@')[0] ?? '';
+  const parts = local.split(/[.\-_]/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return local.slice(0, 2).toUpperCase();
+}
+
+function getNameInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+const visibleTabs: Array<{ id: Tab; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'people', label: 'People' },
+  { id: 'moments', label: 'Moments' },
+  { id: 'templates', label: 'Templates' },
+  { id: 'settings', label: 'Settings' },
+];
+
+export default function Dashboard({ user, onLogout, api: apiProp }: DashboardProps) {
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
-  const [guidedMode, setGuidedMode] = useState(false);
+  const [orgName, setOrgName] = useState<string>('');
 
   const refreshOnboarding = async () => {
     try {
-      const data = await api.call('/onboarding/status');
+      const data = await apiProp.call('/onboarding/status');
       setOnboarding(data.onboarding || data);
-    } catch (err) {
-      console.error('Onboarding fetch failed', err);
+    } catch {
+      // non-critical
     }
   };
 
   useEffect(() => {
     refreshOnboarding();
+    api.call('/settings').then((d) => {
+      setOrgName(d?.organization?.name || d?.organization?.emailFromName || '');
+    }).catch(() => {});
   }, []);
-
-  const hasFirstSend = onboarding?.hasFirstSend ?? false;
-
-  useEffect(() => {
-    if (!hasFirstSend && activeTab === 'upcoming') {
-      setActiveTab('dashboard');
-    }
-  }, [hasFirstSend, activeTab]);
 
   const handleOnboardingUpdate = (next: OnboardingState) => {
     setOnboarding(next);
-    if (next.progress.completed >= next.progress.total) {
-      setGuidedMode(false);
-    }
-    if (guidedMode && next.progress.completed < next.progress.total && next.currentStepId) {
-      const activeStep = next.steps.find((step) => step.id === next.currentStepId);
-      if (activeStep) {
-        setActiveTab(activeStep.route);
-      }
-    }
   };
 
   const renderFallback = (label: string) => (
-    <div className="text-center py-8 text-sm text-gray-500">Loading {label}...</div>
+    <div className="py-10 text-center text-sm text-slate-400">Loading {label}…</div>
   );
 
-  const tabs: Array<{
-    id: 'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'settings';
-    label: string;
-    hidden?: boolean;
-  }> = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'upload', label: 'Upload People' },
-    { id: 'people', label: 'All People' },
-    { id: 'upcoming', label: 'Upcoming Celebrations', hidden: !hasFirstSend },
-    { id: 'templates', label: 'Email Templates' },
-    { id: 'moments', label: 'Moments' },
-    { id: 'settings', label: 'Settings' },
-  ];
+  const initials = user?.email
+    ? getEmailInitials(user.email)
+    : orgName
+      ? getNameInitials(orgName)
+      : '?';
 
   return (
-    <div className="ds-page">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4">
+    <div className="min-h-screen bg-slate-50">
+      {/* Top header */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+          <div className="flex items-center gap-2.5">
+            <LogoMark size={24} />
+            <span className="text-sm font-semibold text-slate-900">MomentOS</span>
+          </div>
           <div className="flex items-center gap-3">
-            <svg className="h-8 w-8 flex-shrink-0" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="MomentOS">
-              <rect width="120" height="120" rx="28" fill="#0f172a"/>
-              <circle cx="60" cy="72" r="24" fill="none" stroke="white" strokeWidth="9"/>
-              <circle cx="60" cy="30" r="7.5" fill="#2563eb"/>
-            </svg>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900">MomentOS</h1>
-              <p className="text-xs text-slate-500">Celebration automation workspace</p>
+            {orgName && (
+              <span className="text-sm text-slate-500">{orgName}</span>
+            )}
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+              {initials}
             </div>
           </div>
-          <Button onClick={onLogout} variant="secondary" size="sm">
-            Sign out
-          </Button>
+        </div>
+
+        {/* Tab navigation */}
+        <div className="mx-auto max-w-7xl px-6">
+          <nav className="flex gap-1 pb-2">
+            {visibleTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-8">
-        <div className="mb-6 ds-tablist">
-          {tabs.filter((tab) => !tab.hidden).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn('ds-tab', activeTab === tab.id && 'ds-tab-active')}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'dashboard' && (
-          <Suspense fallback={renderFallback('dashboard')}>
+      {/* Main content */}
+      <main className="mx-auto max-w-7xl px-6 py-6">
+        <Suspense fallback={renderFallback('dashboard')}>
+          {activeTab === 'dashboard' && (
             <AdminDashboard
               onSelectTab={(tab) => setActiveTab(tab)}
               onboarding={onboarding}
               onRefreshOnboarding={refreshOnboarding}
-              onStartGuided={() => {
-                setGuidedMode(true);
-                const nextStep = onboarding?.steps.find((step) => step.status === 'active');
-                if (nextStep) {
-                  setActiveTab(nextStep.route);
-                } else {
-                  setActiveTab('people');
-                }
-              }}
+              onStartGuided={() => setActiveTab('people')}
+              onLogout={onLogout}
+              userEmail={user?.email}
             />
-          </Suspense>
-        )}
-        {activeTab === 'upload' && (
-          <Suspense fallback={renderFallback('upload tools')}>
+          )}
+        </Suspense>
+        <Suspense fallback={renderFallback('upload')}>
+          {activeTab === 'upload' && (
             <CSVUpload
               onboarding={onboarding}
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
             />
-          </Suspense>
-        )}
-        {activeTab === 'people' && (
-          <Suspense fallback={renderFallback('people')}>
+          )}
+        </Suspense>
+        <Suspense fallback={renderFallback('people')}>
+          {activeTab === 'people' && (
             <PeopleList
               allowManualSend={true}
               onboarding={onboarding}
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
             />
-          </Suspense>
-        )}
-        {activeTab === 'upcoming' && (
-          <Suspense fallback={renderFallback('upcoming celebrations')}>
-            <UpcomingCelebrations />
-          </Suspense>
-        )}
-        {activeTab === 'templates' && (
-          <Suspense fallback={renderFallback('templates')}>
+          )}
+        </Suspense>
+        <Suspense fallback={renderFallback('templates')}>
+          {activeTab === 'templates' && (
             <Templates
-              api={api}
+              api={apiProp}
               onboarding={onboarding}
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
             />
-          </Suspense>
-        )}
-        {activeTab === 'settings' && (
-          <Suspense fallback={renderFallback('settings')}>
+          )}
+        </Suspense>
+        <Suspense fallback={renderFallback('settings')}>
+          {activeTab === 'settings' && (
             <Settings
-              api={api}
+              api={apiProp}
               onboarding={onboarding}
               onOnboardingUpdate={handleOnboardingUpdate}
               onSelectTab={(tab) => setActiveTab(tab)}
             />
-          </Suspense>
-        )}
-        {activeTab === 'moments' && (
-          <Suspense fallback={renderFallback('moments')}>
-            <Moments api={api} onOpenPeople={() => setActiveTab('people')} />
-          </Suspense>
-        )}
+          )}
+        </Suspense>
+        <Suspense fallback={renderFallback('moments')}>
+          {activeTab === 'moments' && (
+            <Moments api={apiProp} onOpenPeople={() => setActiveTab('people')} />
+          )}
+        </Suspense>
       </main>
-      <FeedbackWidget api={api} />
+
+      <FeedbackWidget api={apiProp} />
     </div>
   );
 }

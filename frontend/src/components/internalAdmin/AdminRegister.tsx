@@ -92,7 +92,7 @@ export default function AdminRegister() {
               </div>
             )}
             {error ? <div className="ds-alert ds-alert-error">{error}</div> : null}
-            <Button type="submit" disabled={loading} fullWidth>
+            <Button type="submit" loading={loading} fullWidth>
               {loading ? "Creating..." : "Create admin"}
             </Button>
           </form>

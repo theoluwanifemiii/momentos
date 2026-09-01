@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { adminApi } from "../../api";
-import { Button, cn } from "../ui";
+import { Button, cn, LogoMark } from "../ui";
 
 type AdminInfo = {
   id: string;
@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
   { to: "/admin/delivery-logs", label: "Delivery Logs" },
   { to: "/admin/audit-logs", label: "Audit Logs" },
   { to: "/admin/feedback", label: "Feedback" },
+  { to: "/admin/docs", label: "Dev Docs" },
 ];
 
 export default function AdminLayout() {
@@ -115,7 +116,10 @@ export default function AdminLayout() {
       ) : null}
       <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white px-5 py-6 lg:flex lg:flex-col">
         <div className="mb-6 space-y-2">
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">MomentOS</div>
+          <div className="flex items-center gap-2.5">
+            <LogoMark size={22} />
+            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">MomentOS</div>
+          </div>
           <div className="text-lg font-semibold text-slate-900">Internal Admin</div>
           {admin ? <div className="text-xs text-slate-500">{admin.email} · {admin.role}</div> : null}
         </div>
@@ -147,9 +151,12 @@ export default function AdminLayout() {
         <div className="w-full px-3 py-4 sm:px-4 lg:px-6 lg:py-5">
           <header className="mb-3 rounded-xl border border-slate-200 bg-white p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">MomentOS</div>
-                <div className="text-sm font-semibold text-slate-900">Internal Admin</div>
+              <div className="flex items-center gap-2.5">
+                <LogoMark size={20} />
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">MomentOS</div>
+                  <div className="text-sm font-semibold text-slate-900">Internal Admin</div>
+                </div>
               </div>
               <Button onClick={handleLogout} variant="secondary" size="sm">
                 Sign out

@@ -55,7 +55,7 @@ export default function ForgotPasswordForm({ onSuccess, onBackToLogin }: ForgotP
       </div>
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
       {message && <p className="ds-alert ds-alert-success">{message}</p>}
-      <Button onClick={handleSubmit} disabled={loading} fullWidth>
+      <Button onClick={handleSubmit} loading={loading} fullWidth>
         {loading ? 'Sending...' : 'Send reset link'}
       </Button>
     </AuthContainer>

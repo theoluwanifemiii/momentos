@@ -114,8 +114,8 @@ export default function ResetPasswordForm({ onSuccess, onBackToLogin }: ResetPas
       </div>
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
       {message && <p className="ds-alert ds-alert-success">{message}</p>}
-      <Button onClick={handleSubmit} disabled={loading || !token} fullWidth>
-        {loading ? 'Updating...' : 'Update password'}
+      <Button onClick={handleSubmit} loading={loading} disabled={!token} fullWidth>
+        Update password
       </Button>
     </AuthContainer>
   );

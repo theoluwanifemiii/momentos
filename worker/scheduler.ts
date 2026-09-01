@@ -19,6 +19,8 @@ const prisma = new PrismaClient();
 
 const DEFAULT_FROM_EMAIL =
   process.env.DEFAULT_FROM_EMAIL || 'birthday@mail.usemomentos.xyz';
+const MOMENT_FROM_EMAIL =
+  process.env.MOMENT_FROM_EMAIL || 'moments@mail.usemomentos.xyz';
 const DEFAULT_FROM_NAME = process.env.DEFAULT_FROM_NAME;
 const NOTIFICATIONS_FROM_EMAIL = process.env.NOTIFICATIONS_FROM_EMAIL;
 const NOTIFICATIONS_FROM_NAME = process.env.NOTIFICATIONS_FROM_NAME;
@@ -116,6 +118,9 @@ type TemplateRecord = {
 type MomentForProcessing = Prisma.MomentGetPayload<{
   include: {
     template: true;
+    ownerUser: {
+      select: { email: true };
+    };
     recipients: {
       include: {
         person: true;
@@ -200,6 +205,7 @@ interface EmailProvider {
     html?: string;
     text?: string;
     from: { name: string; email: string };
+    replyTo?: string;
   }): Promise<{ id: string; success: boolean }>;
 }
 
@@ -216,6 +222,7 @@ class ResendEmailProvider implements EmailProvider {
     html?: string;
     text?: string;
     from: { name: string; email: string };
+    replyTo?: string;
   }) {
     const result = await this.resend.emails.send({
       from: `${params.from.name} <${params.from.email}>`,
@@ -223,6 +230,7 @@ class ResendEmailProvider implements EmailProvider {
       subject: params.subject,
       html: params.html,
       text: params.text ?? '',
+      replyTo: params.replyTo,
     });
 
     if (result.error) {
@@ -747,8 +755,20 @@ From everyone at {{organization_name}}`,
     content: string;
     orgNow: DateTime;
     momentId?: string | null;
+    replyTo?: string | null;
+    senderEmail?: string | null;
   }) {
-    const { person, org, template, subject, content, orgNow, momentId } = params;
+    const {
+      person,
+      org,
+      template,
+      subject,
+      content,
+      orgNow,
+      momentId,
+      replyTo,
+      senderEmail,
+    } = params;
 
     const alreadySent = await this.alreadySentToday({
       organizationId: org.id,
@@ -764,7 +784,7 @@ From everyone at {{organization_name}}`,
     }
 
     const fromEmail = resolveFromEmail(
-      org.emailFromAddress || DEFAULT_FROM_EMAIL
+      senderEmail || org.emailFromAddress || DEFAULT_FROM_EMAIL
     );
     if (!fromEmail) {
       await this.logDelivery({
@@ -797,6 +817,7 @@ From everyone at {{organization_name}}`,
           name: org.emailFromName || org.name || DEFAULT_FROM_NAME || '',
           email: fromEmail,
         },
+        replyTo: replyTo || undefined,
       });
 
       await this.logDelivery({
@@ -1189,6 +1210,8 @@ From everyone at {{organization_name}}`,
           content,
           orgNow,
           momentId: moment.id,
+          replyTo: moment.ownerUser?.email,
+          senderEmail: MOMENT_FROM_EMAIL,
         });
       } else if (channel === DeliveryChannel.sms) {
         await this.sendSmsChannel({
@@ -1283,6 +1306,9 @@ From everyone at {{organization_name}}`,
           },
           include: {
             template: true,
+            ownerUser: {
+              select: { email: true },
+            },
             recipients: {
               include: {
                 person: true,

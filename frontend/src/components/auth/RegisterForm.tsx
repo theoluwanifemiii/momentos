@@ -126,7 +126,7 @@ export default function RegisterForm({ onSwitchToLogin, onMagicLinkSent }: Regis
       </div>
       {error && <p className="ds-alert ds-alert-error">{error}</p>}
       {message && <p className="ds-alert ds-alert-success">{message}</p>}
-      <Button onClick={handleSubmit} disabled={loading} fullWidth>
+      <Button onClick={handleSubmit} loading={loading} fullWidth>
         {loading ? 'Sending link...' : 'Send Sign-Up Link'}
       </Button>
     </AuthContainer>

@@ -110,7 +110,7 @@ export default function AdminLogin() {
                   />
                 </div>
                 {error ? <div className="ds-alert ds-alert-error">{error}</div> : null}
-                <Button type="submit" disabled={loading} fullWidth>
+                <Button type="submit" loading={loading} fullWidth>
                   {loading ? "Sending..." : "Send reset link"}
                 </Button>
               </form>
@@ -151,7 +151,7 @@ export default function AdminLogin() {
                   />
                 </div>
                 {error ? <div className="ds-alert ds-alert-error">{error}</div> : null}
-                <Button type="submit" disabled={loading} fullWidth>
+                <Button type="submit" loading={loading} fullWidth>
                   {loading ? "Updating..." : "Set new password"}
                 </Button>
               </form>
@@ -203,7 +203,7 @@ export default function AdminLogin() {
               />
             </div>
             {error ? <div className="ds-alert ds-alert-error">{error}</div> : null}
-            <Button type="submit" disabled={loading} fullWidth>
+            <Button type="submit" loading={loading} fullWidth>
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>

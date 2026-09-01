@@ -115,8 +115,8 @@ export default function LoginForm({
       {token ? (
         <p className="text-sm text-slate-500">Verifying your magic link...</p>
       ) : (
-        <Button onClick={handleSubmit} disabled={loading || verifyingLink} fullWidth>
-          {verifyingLink ? 'Verifying link...' : loading ? 'Sending link...' : 'Send Sign-In Link'}
+        <Button onClick={handleSubmit} loading={loading} disabled={verifyingLink} fullWidth>
+          {verifyingLink ? 'Verifying link...' : 'Send Sign-In Link'}
         </Button>
       )}
     </AuthContainer>

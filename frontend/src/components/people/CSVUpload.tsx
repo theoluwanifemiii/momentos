@@ -119,10 +119,10 @@ export default function CSVUpload({ onboarding, onOnboardingUpdate, onSelectTab 
 
             <Button
               onClick={handleSubmit}
-              disabled={loading}
+              loading={loading}
               className="w-full sm:w-auto"
             >
-              {loading ? 'Uploading...' : 'Upload & Validate'}
+              Upload & Validate
             </Button>
           </>
         )}
