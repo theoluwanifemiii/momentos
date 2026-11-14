@@ -42,6 +42,8 @@ model Organization {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  campaigns     Campaign[]
+  campaignTemplates CampaignTemplate[]
   
   @@map("organizations")
 }
@@ -70,6 +72,7 @@ model User {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  campaigns      Campaign[]
   
   @@map("users")
 }
@@ -173,6 +176,7 @@ model Template {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  campaigns     Campaign[]
   
   @@map("templates")
 }
@@ -435,4 +439,116 @@ model AdminInvite {
   createdAt  DateTime   @default(now())
 
   @@map("admin_invites")
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+/// A campaign sends to its own uploaded contact list, never to `people`.
+/// Recurrence reuses MomentRecurrence so the worker shares one due-date engine.
+model Campaign {
+  id                 String             @id @default(cuid())
+  name               String
+  organizationId     String
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUserId    String?
+  createdBy          User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  subject            String
+  bodyText           String
+  bodyHtml           String?
+  smsText            String?
+  replyTo            String?
+  templateId         String?
+  template           Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  campaignTemplateId String?
+  campaignTemplate   CampaignTemplate?  @relation(fields: [campaignTemplateId], references: [id], onDelete: SetNull)
+  deliveryChannels   DeliveryChannel[]  @default([email])
+  recurrenceRule     MomentRecurrence   @default(ONE_TIME)
+  customIntervalDays Int?
+  startDate          DateTime
+  endDate            DateTime?
+  sendHour           Int                @default(9)
+  sendMinute         Int                @default(0)
+  status             CampaignStatus     @default(DRAFT)
+  lastRunAt          DateTime?
+  lastRunDate        String?
+  runCount           Int                @default(0)
+  contacts           CampaignContact[]
+  deliveries         CampaignDelivery[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([organizationId, status])
+  @@index([status, startDate])
+  @@map("campaigns")
+}
+
+model CampaignContact {
+  id         String             @id @default(cuid())
+  campaignId String
+  campaign   Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  firstName  String
+  lastName   String?
+  email      String?
+  phone      String?
+  optedOut   Boolean            @default(false)
+  attributes Json?
+  deliveries CampaignDelivery[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([campaignId, email])
+  @@index([campaignId])
+  @@map("campaign_contacts")
+}
+
+model CampaignDelivery {
+  id             String          @id @default(cuid())
+  campaignId     String
+  campaign       Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        CampaignContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organizationId String
+  channel        DeliveryChannel
+  status         DeliveryStatus  @default(QUEUED)
+  runDate        String
+  scheduledFor   DateTime
+  sentAt         DateTime?
+  errorMessage   String?
+  externalId     String?
+  segments       Int?
+  createdAt      DateTime        @default(now())
+
+  @@unique([campaignId, contactId, channel, runDate])
+  @@index([campaignId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("campaign_deliveries")
+}
+
+/// Templates owned by Campaigns. Deliberately separate from the shared Template
+/// table, which Moments also render: a campaign template carries a {{body}}
+/// slot that only the campaign sender knows how to fill, and putting that token
+/// in a shared template would leak the literal "{{body}}" into moment emails.
+model CampaignTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  /// Optional default; a campaign's own subject wins when set.
+  subject        String?
+  /// HTML wrapper containing a {{body}} slot.
+  content        String
+  /// Seeded starters, visible to every organization and not editable by them.
+  isSystem       Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  campaigns      Campaign[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, isActive])
+  @@map("campaign_templates")
 }

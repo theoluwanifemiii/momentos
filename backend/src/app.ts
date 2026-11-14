@@ -23,6 +23,7 @@ import { registerMomentsRoutes } from "./routes/Moments";
 import { registerWebhookRoutes } from "./routes/Webhooks";
 import { registerFeedbackRoutes } from "./routes/Feedback";
 import { registerCampaignRoutes } from "./routes/Campaigns";
+import { registerCampaignTemplateRoutes } from "./routes/CampaignTemplates";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -101,6 +102,7 @@ registerAiRoutes(app);
 registerWebhookRoutes(app);
 registerFeedbackRoutes(app);
 registerCampaignRoutes(app);
+registerCampaignTemplateRoutes(app);
 
 // Global error handler — captures unhandled errors to PostHog
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

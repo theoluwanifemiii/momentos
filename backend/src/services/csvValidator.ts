@@ -292,16 +292,13 @@ export class CSVValidator {
   ): { success: true; date: Date } | { success: false; error: string } {
     
     const formats = [
-      // YYYY-MM-DD (preferred)
+  
       { regex: /^(\d{4})-(\d{1,2})-(\d{1,2})$/, order: ['year', 'month', 'day'] },
       
-      // DD/MM/YYYY
       { regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, order: ['day', 'month', 'year'] },
       
-      // MM/DD/YYYY (flagged but supported)
       { regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, order: ['month', 'day', 'year'] },
       
-      // DD-MM-YYYY
       { regex: /^(\d{1,2})-(\d{1,2})-(\d{4})$/, order: ['day', 'month', 'year'] },
     ];
     
@@ -323,8 +320,7 @@ export class CSVValidator {
       if (parts.month === 2 && parts.day === 29) {
         // Allow Feb 29, we'll handle it in delivery logic
       }
-      
-      // Create date (month is 0-indexed in JS)
+    
       const date = new Date(parts.year, parts.month - 1, parts.day);
       
       // Validate the date is real (handles invalid dates like Feb 31)
