@@ -1562,7 +1562,6 @@ From everyone at {{organization_name}}`,
 
     cron.schedule('0 * * * *', async () => {
       console.log(`Running scheduled birthday check: ${new Date().toISOString()}`);
-      await this.runCampaigns();
       try {
         await this.run();
       } catch (error) {
@@ -1572,6 +1571,12 @@ From everyone at {{organization_name}}`,
           console.error('[SCHEDULER] Failed to report crash:', reportErr);
         }
       }
+    });
+
+    // Campaigns carry their own send hour and minute, so they are checked on
+    // a short tick of their own rather than the hourly birthday run.
+    cron.schedule('*/5 * * * *', async () => {
+      await this.runCampaigns();
     });
 
     console.log('Running initial check.');

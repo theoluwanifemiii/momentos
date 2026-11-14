@@ -11,6 +11,21 @@ type SmsProviderResponse = {
   [key: string]: unknown;
 };
 
+type SmsSendResult = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+};
+
+/** Termii's standard route; the only one every account has. */
+const GENERIC_CHANNEL = 'generic';
+
+const isRouteNotConfigured = (error?: string) => /route\s+not\s+configured/i.test(error || '');
+
+/** Keeps phone numbers out of logs beyond the last four digits. */
+const maskPhone = (phone: string) =>
+  phone.length > 4 ? `${'*'.repeat(phone.length - 4)}${phone.slice(-4)}` : '****';
+
 export class SMSService {
   private apiKey: string;
   private baseUrl = 'https://v3.api.termii.com/api';
@@ -23,7 +38,8 @@ export class SMSService {
     this.apiKey = process.env.TERMII_API_KEY || '';
     this.testMode = this.isTestModeEnabled();
     this.defaultSenderId = (process.env.TERMII_SMS_FROM || 'Moment OS').trim();
-    this.channel = (process.env.TERMII_SMS_CHANNEL || 'generic').trim() || 'generic';
+    this.channel =
+      (process.env.TERMII_SMS_CHANNEL || GENERIC_CHANNEL).trim().toLowerCase() || GENERIC_CHANNEL;
     this.notifyUrl = (process.env.TERMII_SMS_NOTIFY_URL || '').trim() || undefined;
 
     if (!this.apiKey) {
@@ -42,29 +58,59 @@ export class SMSService {
     if (this.testMode) {
       const phone = this.formatPhoneNumber(params.to);
       const messageId = `mock-${Date.now()}`;
-      console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
+      console.log(`[MOCK] SMS sent to ${maskPhone(phone)}: ${messageId}`);
       return { success: true, messageId };
     }
     if (!this.apiKey) {
       return { success: false, error: 'TERMII_API_KEY is not configured' };
     }
 
+    let phone: string;
     try {
-      const phone = this.formatPhoneNumber(params.to);
-      const from = this.resolveSenderId(params.senderId);
+      phone = this.formatPhoneNumber(params.to);
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Invalid phone number' };
+    }
+    const from = this.resolveSenderId(params.senderId);
 
-      const payload: Record<string, unknown> = {
-        to: phone,
-        from,
-        sms: params.message,
-        type: 'plain',
-        channel: this.channel,
-        api_key: this.apiKey,
-      };
-      if (this.notifyUrl) {
-        payload.notify_url = this.notifyUrl;
-      }
+    // A route the Termii account has not enabled (e.g. "dnd") fails every
+    // send with "Route not configured", so fall back to the generic route.
+    const channels =
+      this.channel === GENERIC_CHANNEL ? [GENERIC_CHANNEL] : [this.channel, GENERIC_CHANNEL];
 
+    let result: SmsSendResult = { success: false, error: 'SMS request failed' };
+    for (const channel of channels) {
+      result = await this.sendOnChannel(phone, from, params.message, channel);
+      if (result.success || !isRouteNotConfigured(result.error)) break;
+      console.warn(
+        `Termii route "${channel}" is not configured on this account; retrying on "${GENERIC_CHANNEL}". Set TERMII_SMS_CHANNEL=${GENERIC_CHANNEL} to skip this.`,
+      );
+    }
+    return result;
+  }
+
+  private async sendOnChannel(
+    phone: string,
+    from: string,
+    message: string,
+    channel: string,
+  ): Promise<SmsSendResult> {
+    const payload: Record<string, unknown> = {
+      to: phone,
+      from,
+      sms: message,
+      type: 'plain',
+      channel,
+      api_key: this.apiKey,
+    };
+    if (this.notifyUrl) {
+      payload.notify_url = this.notifyUrl;
+    }
+
+    // Never log `payload`: it carries the API key.
+    console.log(`Sending SMS to ${maskPhone(phone)} from "${from}" on route "${channel}"`);
+
+    try {
       const response = await fetch(`${this.baseUrl}/sms/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,10 +118,16 @@ export class SMSService {
       });
 
       const text = await response.text();
-      const data = text ? (JSON.parse(text) as SmsProviderResponse) : {};
+      let data: SmsProviderResponse = {};
+      try {
+        data = text ? (JSON.parse(text) as SmsProviderResponse) : {};
+      } catch {
+        data = {};
+      }
       const providerCode = `${data.code || ''}`.toLowerCase();
       const providerMessage = `${data.message || ''}`.toLowerCase();
       const providerLooksFailed =
+        !response.ok ||
         providerCode.includes('fail') ||
         providerCode.includes('error') ||
         providerCode.includes('invalid') ||
@@ -89,28 +141,23 @@ export class SMSService {
         (providerCode === 'ok' || providerCode === 'success' || Boolean(data.message_id));
 
       if (accepted) {
-        console.log(`✅ SMS accepted by provider for ${phone}: ${data.message_id || 'no-id'}`);
+        console.log(`SMS accepted by provider for ${maskPhone(phone)}: ${data.message_id || 'no-id'}`);
         return {
           success: true,
           messageId: data.message_id != null ? String(data.message_id) : undefined,
         };
       }
 
-      console.error(`❌ SMS failed: ${data.message || text || response.status}`);
-      return {
-        success: false,
-        error:
-          data.message ||
-          (providerCode ? `Provider response code: ${providerCode}` : undefined) ||
-          text ||
-          `Request failed with status ${response.status}`,
-      };
+      const error =
+        (typeof data.message === 'string' && data.message) ||
+        (providerCode ? `Provider response code: ${providerCode}` : '') ||
+        text.slice(0, 300) ||
+        `Request failed with status ${response.status}`;
+      console.error(`SMS failed (${response.status}): ${error}`);
+      return { success: false, error };
     } catch (error: any) {
-      console.error('SMS Service Error:', error.message);
-      return {
-        success: false,
-        error: error.message,
-      };
+      console.error('SMS Service Error:', error?.message || 'unknown error');
+      return { success: false, error: error?.message || 'SMS request failed' };
     }
   }
 

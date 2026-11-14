@@ -92,16 +92,17 @@ export default function ContactImport({ api, campaignId, onImported }: ContactIm
           <div>
             <p className="text-sm font-medium text-slate-900">Upload recipients</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              CSV columns: <code className="rounded bg-white px-1">first_name</code>,{' '}
-              <code className="rounded bg-white px-1">last_name</code>,{' '}
-              <code className="rounded bg-white px-1">email</code>,{' '}
-              <code className="rounded bg-white px-1">phone</code>
+              CSV columns: <code className="rounded bg-white px-1">first_name</code> (or{' '}
+              <code className="rounded bg-white px-1">name</code>),{' '}
+              <code className="rounded bg-white px-1">phone</code>,{' '}
+              <code className="rounded bg-white px-1">email</code>. Local numbers like 0803… are
+              fine; duplicates are skipped.
             </p>
           </div>
           <a
             className="text-xs font-medium text-blue-600 hover:underline"
             href={`data:text/csv;charset=utf-8,${encodeURIComponent(
-              'first_name,last_name,email,phone\nAda,Obi,ada@example.com,+2348012345678\n'
+              'first_name,last_name,email,phone\nAda,Obi,ada@example.com,08012345678\n'
             )}`}
             download="campaign-contacts-template.csv"
           >

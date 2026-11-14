@@ -118,7 +118,12 @@ const cleanErrorMessage = (message: string) =>
 const resolveSmsBody = (campaign: Campaign) =>
   (campaign.smsText && campaign.smsText.trim()) || campaign.bodyText;
 
+/** How long after its send time a campaign may still go out. */
+const SEND_WINDOW_MINUTES = 120;
+
 export class CampaignRunner {
+  private running = false;
+
   constructor(
     private prisma: PrismaClient,
     private emailProvider: CampaignEmailSender,
@@ -272,9 +277,20 @@ export class CampaignRunner {
     const runDate = orgNow.toISODate();
     if (!runDate) return;
 
-    if (orgNow.hour !== campaign.sendHour) return;
     if (campaign.lastRunDate === runDate) return;
     if (!isCampaignDueOn(campaign, orgNow)) return;
+
+    // Send at or after the chosen hour:minute, within a catch-up window so a
+    // worker restart or a slow tick does not skip the day. Past the window the
+    // day is missed rather than sent hours late.
+    const sendAt = orgNow.set({
+      hour: campaign.sendHour,
+      minute: campaign.sendMinute,
+      second: 0,
+      millisecond: 0,
+    });
+    const minutesLate = orgNow.diff(sendAt, 'minutes').minutes;
+    if (minutesLate < 0 || minutesLate >= SEND_WINDOW_MINUTES) return;
 
     const claimed = await this.prisma.campaign.updateMany({
       where: { id: campaign.id, lastRunDate: campaign.lastRunDate },
@@ -285,10 +301,12 @@ export class CampaignRunner {
       return;
     }
 
-    const senderEmail = this.resolveFromEmail(
-      org.emailFromAddress || this.defaults.fromEmail
-    );
-    if (!senderEmail) {
+    // SMS-only campaigns do not need an email sender.
+    const sendsEmail = campaign.deliveryChannels.includes(DeliveryChannel.email);
+    const senderEmail = sendsEmail
+      ? this.resolveFromEmail(org.emailFromAddress || this.defaults.fromEmail)
+      : '';
+    if (sendsEmail && !senderEmail) {
       console.error(
         `[campaign ${campaign.id}] no verified sender address; skipping run`
       );
@@ -312,7 +330,7 @@ export class CampaignRunner {
         contact,
         org,
         runDate,
-        senderEmail,
+        senderEmail: senderEmail || '',
         senderName,
       });
     }
@@ -355,7 +373,18 @@ export class CampaignRunner {
     }
   }
 
+  /** One pass over active campaigns. Overlapping calls return immediately. */
   async run() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.runOnce();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runOnce() {
     const campaigns = await this.prisma.campaign.findMany({
       where: {
         status: 'ACTIVE',

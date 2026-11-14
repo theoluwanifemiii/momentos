@@ -236,10 +236,12 @@ export async function runCampaign(params: {
 }): Promise<CampaignRunResult> {
   const { campaign, contacts, organization, runDate } = params;
 
-  const senderEmail = resolveFromEmail(
-    organization.emailFromAddress || MOMENT_FROM_EMAIL
-  );
-  if (!senderEmail) {
+  // SMS-only campaigns do not need an email sender.
+  const sendsEmail = campaign.deliveryChannels.includes(DeliveryChannel.email);
+  const senderEmail = sendsEmail
+    ? resolveFromEmail(organization.emailFromAddress || MOMENT_FROM_EMAIL)
+    : "";
+  if (sendsEmail && !senderEmail) {
     throw new Error(
       "No verified sender address is configured, so this campaign cannot send email."
     );
@@ -320,7 +322,7 @@ export async function runCampaign(params: {
             html: emailBody.html
               ? interpolateTemplate(emailBody.html, variables)
               : undefined,
-            from: { name: senderName, email: senderEmail },
+            from: { name: senderName, email: senderEmail! },
             replyTo: campaign.replyTo || params.senderReplyTo || undefined,
           });
           await finishSlot({

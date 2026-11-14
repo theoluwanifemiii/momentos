@@ -21,7 +21,10 @@ import { EmailService } from "../services/emailService";
 import { smsService } from "../services/smsService";
 import {
   CAMPAIGN_CSV_TEMPLATE,
+  CAMPAIGN_PLACEHOLDERS,
+  findInvalidPlaceholders,
   MAX_CAMPAIGN_CONTACTS,
+  normalizeCampaignPhone,
   validateCampaignCsv,
 } from "../services/campaignCsvValidator";
 import {
@@ -188,6 +191,23 @@ const assertCampaignTemplateBelongsToOrganization = async (
   });
   if (!template) {
     throw new CampaignError("Campaign template is not available for this organization.");
+  }
+};
+
+/**
+ * Rejects placeholders the sender would leave in the message literally, such
+ * as {{firstname}} or {{ first_name }}, so recipients never see raw braces.
+ */
+const assertPlaceholdersValid = (fields: Record<string, string | null | undefined>) => {
+  for (const [label, text] of Object.entries(fields)) {
+    const bad = findInvalidPlaceholders(text);
+    if (bad.length > 0) {
+      throw new CampaignError(
+        `The ${label} uses ${bad.join(", ")}, which will not be filled in. Use one of: ${CAMPAIGN_PLACEHOLDERS.map(
+          (p) => `{{${p}}}`
+        ).join(", ")}.`
+      );
+    }
   }
 };
 
@@ -387,6 +407,11 @@ export function registerCampaignRoutes(app: Express) {
           req.organizationId!,
           data.campaignTemplateId
         );
+        assertPlaceholdersValid({
+          subject: data.subject,
+          message: data.bodyText,
+          "SMS text": data.smsText,
+        });
         assertSmsBodyValid(data);
 
         if (data.endDate && data.endDate < data.startDate) {
@@ -519,9 +544,14 @@ export function registerCampaignRoutes(app: Express) {
           throw new CampaignError("SMS is not enabled for this organization.");
         }
 
+        assertPlaceholdersValid({
+          subject: data.subject,
+          message: data.bodyText,
+          "SMS text": data.smsText,
+        });
         assertSmsBodyValid({
           deliveryChannels,
-          smsText: data.smsText ?? existing.smsText,
+          smsText: data.smsText === undefined ? existing.smsText : data.smsText,
           bodyText: data.bodyText ?? existing.bodyText,
         });
 
@@ -659,14 +689,24 @@ export function registerCampaignRoutes(app: Express) {
           );
         }
 
-        const created = await prisma.campaignContact.createMany({
-          data: contacts.map((contact) => ({
+        const rows = contacts.map((contact) => {
+          let phone: string | null = null;
+          if (contact.phone) {
+            const normalized = normalizeCampaignPhone(contact.phone);
+            if (!normalized.ok) throw new CampaignError(normalized.error);
+            phone = normalized.phone;
+          }
+          return {
             campaignId: campaign.id,
             firstName: contact.firstName,
             lastName: contact.lastName ?? null,
             email: contact.email ? contact.email.toLowerCase() : null,
-            phone: contact.phone ?? null,
-          })),
+            phone,
+          };
+        });
+
+        const created = await prisma.campaignContact.createMany({
+          data: rows,
           skipDuplicates: true,
         });
 
@@ -686,10 +726,10 @@ export function registerCampaignRoutes(app: Express) {
         const data = importSchema.parse(req.body);
         const campaign = await loadCampaignForOrg(req.params.id, req.organizationId!);
 
-        const result = validateCampaignCsv(data.csv, {
-          requireEmail: campaign.deliveryChannels.includes(DeliveryChannel.email),
-          requirePhone: campaign.deliveryChannels.includes(DeliveryChannel.sms),
-        });
+        const channels: Array<"email" | "sms"> = [];
+        if (campaign.deliveryChannels.includes(DeliveryChannel.email)) channels.push("email");
+        if (campaign.deliveryChannels.includes(DeliveryChannel.sms)) channels.push("sms");
+        const result = validateCampaignCsv(data.csv, { channels });
 
         if (result.valid.length === 0) {
           return res.status(400).json({
@@ -699,33 +739,43 @@ export function registerCampaignRoutes(app: Express) {
           });
         }
 
-        if (data.mode === "replace") {
-          await prisma.campaignContact.deleteMany({
-            where: { campaignId: campaign.id },
-          });
-        }
-
-        const existingCount =
+        // In append mode, a number or email already on the list is skipped so
+        // nobody gets the same message twice. (The DB only enforces email.)
+        const existing =
           data.mode === "replace"
-            ? 0
-            : await prisma.campaignContact.count({
+            ? []
+            : await prisma.campaignContact.findMany({
                 where: { campaignId: campaign.id },
+                select: { phone: true, email: true },
               });
-        if (existingCount + result.valid.length > MAX_CAMPAIGN_CONTACTS) {
+        const existingPhones = new Set(existing.map((c) => c.phone).filter(Boolean));
+        const existingEmails = new Set(existing.map((c) => c.email).filter(Boolean));
+        const fresh = result.valid.filter(
+          (c) =>
+            !(c.phone && existingPhones.has(c.phone)) &&
+            !(c.email && existingEmails.has(c.email))
+        );
+
+        if (existing.length + fresh.length > MAX_CAMPAIGN_CONTACTS) {
           throw new CampaignError(
             `That would put the campaign over the ${MAX_CAMPAIGN_CONTACTS} contact limit.`
           );
         }
 
-        const created = await prisma.campaignContact.createMany({
-          data: result.valid.map((contact) => ({
-            campaignId: campaign.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            email: contact.email,
-            phone: contact.phone,
-          })),
-          skipDuplicates: true,
+        const rows = fresh.map((contact) => ({
+          campaignId: campaign.id,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          email: contact.email,
+          phone: contact.phone,
+          attributes: contact.attributes ?? undefined,
+        }));
+
+        const created = await prisma.$transaction(async (tx) => {
+          if (data.mode === "replace") {
+            await tx.campaignContact.deleteMany({ where: { campaignId: campaign.id } });
+          }
+          return tx.campaignContact.createMany({ data: rows, skipDuplicates: true });
         });
 
         posthog.capture({
