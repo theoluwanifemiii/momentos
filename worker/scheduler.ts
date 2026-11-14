@@ -14,6 +14,7 @@ import cron from 'node-cron';
 import { Resend } from 'resend';
 import { smsService } from './smsService';
 import { whatsappService } from './whatsappService';
+import { CampaignRunner } from './campaignRunner';
 
 const prisma = new PrismaClient();
 
@@ -244,9 +245,32 @@ class ResendEmailProvider implements EmailProvider {
 class BirthdayScheduler {
   private emailProvider: EmailProvider;
   private alertCooldowns = new Map<string, number>();
+  private campaignRunner: { run: () => Promise<void> } | null = null;
 
   constructor(emailProvider: EmailProvider) {
     this.emailProvider = emailProvider;
+  }
+
+  setCampaignRunner(runner: { run: () => Promise<void> }) {
+    this.campaignRunner = runner;
+  }
+
+  /**
+   * Campaigns run on their own per-campaign send hour, so this pass is kept
+   * outside `run()`'s org-hour gate and its failures never abort a birthday run.
+   */
+  private async runCampaigns() {
+    if (!this.campaignRunner) return;
+    try {
+      await this.campaignRunner.run();
+    } catch (error: any) {
+      console.error('[campaigns] pass failed:', error?.message || error);
+      await this.logSystemError({
+        category: 'campaign_run_failed',
+        message: `Campaign pass failed: ${error?.message || error}`,
+        severity: ErrorSeverity.ERROR,
+      });
+    }
   }
 
   private shouldSendAlert(key: string) {
@@ -1538,6 +1562,7 @@ From everyone at {{organization_name}}`,
 
     cron.schedule('0 * * * *', async () => {
       console.log(`Running scheduled birthday check: ${new Date().toISOString()}`);
+      await this.runCampaigns();
       try {
         await this.run();
       } catch (error) {
@@ -1550,6 +1575,7 @@ From everyone at {{organization_name}}`,
     });
 
     console.log('Running initial check.');
+    void this.runCampaigns();
     void this.run().catch(async (error) => {
       try {
         await this.reportSchedulerCrash(error, 'initial_run');
@@ -1562,6 +1588,11 @@ From everyone at {{organization_name}}`,
 
 const emailProvider = new ResendEmailProvider();
 const scheduler = new BirthdayScheduler(emailProvider);
+const campaignRunner = new CampaignRunner(prisma, emailProvider, resolveFromEmail, {
+  fromEmail: MOMENT_FROM_EMAIL,
+  fromName: DEFAULT_FROM_NAME || 'MomentOS',
+});
+scheduler.setCampaignRunner(campaignRunner);
 
 scheduler.startCron();
 

@@ -10,9 +10,9 @@ const Templates = lazy(() => import('./Templates.tsx'));
 const Settings = lazy(() => import('./Settings.tsx'));
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard.tsx'));
 const Moments = lazy(() => import('./Moments.tsx'));
-const SavingsCampaign = lazy(() => import('./SavingsCampaign.tsx'));
+const Campaigns = lazy(() => import('./campaigns/Campaigns.tsx'));
 
-type Tab = 'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'savings' | 'settings';
+type Tab = 'dashboard' | 'upload' | 'people' | 'upcoming' | 'templates' | 'moments' | 'campaigns' | 'settings';
 
 type DashboardProps = {
   user: any;
@@ -39,7 +39,7 @@ const visibleTabs: Array<{ id: Tab; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'people', label: 'People' },
   { id: 'moments', label: 'Moments' },
-  { id: 'savings', label: 'Savings' },
+  { id: 'campaigns', label: 'Campaigns' },
   { id: 'templates', label: 'Templates' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -177,8 +177,8 @@ export default function Dashboard({ user, onLogout, api: apiProp }: DashboardPro
             <Moments api={apiProp} onOpenPeople={() => setActiveTab('people')} />
           )}
         </Suspense>
-        <Suspense fallback={renderFallback('savings campaign')}>
-          {activeTab === 'savings' && <SavingsCampaign api={apiProp} />}
+        <Suspense fallback={renderFallback('campaigns')}>
+          {activeTab === 'campaigns' && <Campaigns api={apiProp} />}
         </Suspense>
       </main>
 

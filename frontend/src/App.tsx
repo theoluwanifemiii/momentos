@@ -27,6 +27,20 @@ const AdminStaff = lazy(() => import('./components/internalAdmin/pages/Staff.tsx
 const AdminFeedback = lazy(() => import('./components/internalAdmin/pages/Feedback.tsx'));
 const AdminDocs = lazy(() => import('./components/internalAdmin/pages/Docs.tsx'));
 
+const magicVerifyRequests = new Map<string, Promise<any>>();
+
+const verifyMagicToken = (token: string) => {
+  let request = magicVerifyRequests.get(token);
+  if (!request) {
+    request = api.call('/auth/magic/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    magicVerifyRequests.set(token, request);
+  }
+  return request;
+};
+
 // App shell: auth flow switcher and dashboard entry point.
 export default function MomentOSApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -115,13 +129,9 @@ export default function MomentOSApp() {
       setVerifying(true);
       setError('');
 
-      api
-        .call('/auth/magic/verify', {
-          method: 'POST',
-          body: JSON.stringify({ token }),
-        })
+      verifyMagicToken(token)
         .then((data) => {
-          if (!isMounted) return;
+         
           localStorage.setItem('token', data.token);
           setUser(data.user);
           setIsAuthenticated(true);

@@ -417,10 +417,6 @@ export async function createAdminSession(
     host.includes("localhost") ||
     host.startsWith("127.0.0.1") ||
     host.startsWith("[::1]");
-  // Use SameSite=None; Secure for any non-local host regardless of NODE_ENV.
-  // SameSite=Lax cookies are not sent on cross-origin requests (e.g. Vercel →
-  // Railway), so relying on NODE_ENV meant missing cookies in deployments where
-  // NODE_ENV wasn't explicitly set to "production".
   const secureCookie = !isLocalHost;
 
   res.cookie(ADMIN_SESSION_COOKIE, sessionToken, {

@@ -44,10 +44,6 @@ export class SMSService {
       console.warn("⚠️ SMS_TEST_MODE enabled. SMS will be mocked.");
     }
   }
-
-  /**
-   * Send SMS via Termii
-   */
   async send(params: SMSParams): Promise<SmsSendResult> {
     console.log(
       `Attempting to send SMS to ${params.to} with sender ID "${params.senderId || this.defaultSenderId}"`,
@@ -56,7 +52,7 @@ export class SMSService {
     if (this.testMode) {
       const phone = this.formatPhoneNumber(params.to);
       const messageId = `mock-${Date.now()}`;
-      console.log(`✅ [MOCK] SMS sent to ${phone}: ${messageId}`);
+      console.log(`[MOCK] SMS sent to ${phone}: ${messageId}`);
       return { success: true, messageId, mocked: true };
     }
     if (!this.apiKey) {
@@ -206,9 +202,6 @@ export class SMSService {
     throw new Error("Phone number must include country code");
   }
 
-  /**
-   * Validate phone number format
-   */
   static isValidNigerianPhone(phone: string): boolean {
     const cleaned = phone.replace(/[^\d+]/g, "");
     if (!cleaned) return false;
